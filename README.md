@@ -69,15 +69,21 @@ sozinho. Passo a passo em [docs/DEPLOY-VPS.md](docs/DEPLOY-VPS.md).
 No modo `prod` as portas 5678 e 8080 **deixam de ser publicadas**: só 80/443
 ficam expostas. O banco nunca é exposto.
 
-### No Render
+### Na Oracle Cloud (Always Free)
 
-O Render não roda `docker-compose`: cada peça vira um serviço separado. Os
-`Dockerfile.n8n` e `Dockerfile.evolution` são só ponteiros (`FROM`) para as
-mesmas imagens que o compose usa — não constroem nada, existem porque o runtime
-Docker do Render exige um Dockerfile. O [`render.yaml`](render.yaml) descreve os
-três recursos (n8n, Evolution e o postgres dela): **New → Blueprint**, escolha o
-repo, `Apply`. Passo a passo e limites em
-[docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md).
+A VM ARM Ampere A1 do Always Free (até 4 vCPU / 24 GB, sem prazo) roda a stack
+inteira de graça — as quatro imagens têm build `arm64`, então nada no repo muda.
+O que é específico da Oracle (shape, as duas camadas de firewall, "Out of
+capacity") está em [docs/DEPLOY-ORACLE.md](docs/DEPLOY-ORACLE.md); do Docker em
+diante vale o guia da VPS.
+
+### Em PaaS (Render e afins)
+
+Não recomendado, e o [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md) explica por
+quê: cada peça vira um serviço separado, some a rede interna `auuii-net`, o n8n
+não cabe em 512 MB e qualquer plano que suspenda o processo por ociosidade
+derruba a sessão do WhatsApp. Os arquivos `render.yaml` e `Dockerfile.*` existem
+para esse caminho.
 
 ---
 
@@ -190,5 +196,5 @@ auuii-core/
 ├── testar.sh                  # ./testar.sh [api|menu|cliente|motoboy|restaurante|qr]
 ├── n8n/workflows/             # o fluxo do agente, pronto para colar no canvas
 ├── postman/                   # n8n + backend hospedado
-└── docs/                      # deploy (VPS e Render), integração e contrato da API
+└── docs/                      # deploy (VPS, Oracle, Render), integração e contrato da API
 ```

@@ -127,20 +127,29 @@ Depois aponte o webhook da instância para o n8n
 
 ## Custo e limites
 
-Isso **não roda no plano free**. Dois motivos:
+Isso **não roda no plano free**, e o Starter também não basta. Medido na prática:
 
 - O plano free não tem disco. Sem disco, a Evolution perde a sessão do WhatsApp
   e o n8n perde os fluxos e credenciais a cada deploy.
 - Serviço free dorme depois de 15 min sem tráfego. Um agente de WhatsApp
   precisa estar acordado o tempo todo.
+- **O n8n não cabe no Starter (512 MB).** Ele inicializa, o Render chega a
+  detectar a porta 5678, e então morre em loop com
+  `FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory`.
+  Subir o `NODE_OPTIONS=--max-old-space-size` só troca o erro por
+  `Ran out of memory (used over 512MB)`: o teto é do container. O próximo plano
+  do Render é o `1c-2g`, a $25/mês — não existe opção de 1 GB.
 
-Contas: 2 × Starter ($7/mês cada) + 2 × disco de 1 GB ($0,25/mês cada) +
-postgres `basic-256mb`. Se quiser cortar, o postgres `free` funciona, mas
-expira em 30 dias.
+Conta real: `1c-2g` para o n8n ($25) + Starter para a Evolution ($7) + postgres
+`basic-256mb` (~$6) + dois discos de 1 GB (~$0,50) = **~$38/mês**.
 
-Para comparação, a VPS única (`docs/DEPLOY-VPS.md`) roda os três containers com
-HTTPS pelo Caddy por volta do mesmo preço, e com a rede interna que o compose
-espera.
+A Evolution, essa sim, roda bem no Starter de 512 MB.
+
+Para comparação: a VM ARM do [Oracle Always Free](DEPLOY-ORACLE.md) roda os
+quatro containers com 24 GB de RAM por **$0**, e a VPS paga de 2 vCPU / 4 GB
+(`DEPLOY-VPS.md`) sai entre $5 e $24/mês. As duas mantêm a rede interna
+`auuii-net` que o compose espera, sem os remendos de URL pública que o Render
+obriga.
 
 ---
 
@@ -173,6 +182,11 @@ mesma imagem, publicada nos dois lugares.
 
 **`Port scan timeout`** — o Render não achou a porta aberta. Verifique se `PORT`
 bate com `N8N_PORT` (5678) ou `SERVER_PORT` (8080) no serviço em questão.
+
+**O Render gera URLs com sufixo aleatório.** O `auuii-evolution` virou
+`auuii-evolution-mq4r.onrender.com`. Não adivinhe as URLs ao preencher
+`SERVER_URL` e `EVOLUTION_API_URL`: crie os serviços primeiro, leia a URL real em
+`Settings → URL` de cada um, e só então preencha.
 
 **`failed to read dockerfile: open Dockerfile: no such file or directory`** — o
 serviço está procurando `Dockerfile` na raiz, que não existe (são

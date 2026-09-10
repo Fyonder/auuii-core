@@ -2,6 +2,10 @@
 
 Testado em Ubuntu 22.04/24.04. Recomendado: **2 vCPU / 4 GB RAM / 40 GB SSD**.
 
+> Se a VPS for a ARM gratuita do Oracle Always Free, comece por
+> [DEPLOY-ORACLE.md](DEPLOY-ORACLE.md): a criação da instância e o firewall são
+> diferentes lá. Do passo "Docker" em diante, este guia vale igual.
+
 ---
 
 ## 1. DNS
