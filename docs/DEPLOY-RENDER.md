@@ -7,9 +7,8 @@ failed to read dockerfile: open Dockerfile: no such file or directory
 ```
 
 O serviço no Render está no runtime **Docker**, que procura um `Dockerfile` na
-raiz do repo. Esse repo não tem — e não precisa: ele é só `docker-compose`
-apontando para imagens que já existem no registry (`n8nio/n8n` e
-`evoapicloud/evolution-api`).
+raiz do repo. Esse repo não tinha nenhum — ele é só `docker-compose` apontando
+para imagens que já existem no registry (`n8nio/n8n` e `evoapicloud/evolution-api`).
 
 Dois pontos que mudam o desenho em relação à VPS:
 
@@ -18,19 +17,25 @@ Dois pontos que mudam o desenho em relação à VPS:
 - Não existe a rede interna `auuii-net`. O n8n fala com a Evolution pela URL
   pública `https://auuii-evolution.onrender.com`, não por `http://evolution:8080`.
 
-O `render.yaml` na raiz já resolve isso usando `runtime: image` (sobe a imagem
-pronta, sem build, sem Dockerfile).
+A solução são os dois `Dockerfile` na raiz. Eles não constroem nada:
+
+```dockerfile
+FROM docker.n8n.io/n8nio/n8n:latest
+```
+
+É só um ponteiro para a mesma imagem que o compose já usa. O build no Render
+vira um pull de poucos segundos, e `ENTRYPOINT`, `CMD` e `USER` vêm todos da
+imagem oficial. Existem porque o runtime Docker exige um `Dockerfile` — inclusive
+em serviço criado à mão pelo painel, que sempre nasce nesse runtime.
+
+| Arquivo | Serviço |
+|---|---|
+| `Dockerfile.n8n` | `auuii-n8n` |
+| `Dockerfile.evolution` | `auuii-evolution` |
 
 ---
 
-## 1. Apagar o serviço quebrado
-
-O serviço atual está preso no runtime Docker e não dá pra convertê-lo em Image.
-Delete ele no painel antes de continuar.
-
----
-
-## 2. Criar o Blueprint
+## 1. Criar o Blueprint
 
 No Render: **New → Blueprint** → escolha o repo `Fyonder/auuii-core` → `Apply`.
 
@@ -44,6 +49,30 @@ Ele lê o `render.yaml` e cria três coisas:
 
 O primeiro deploy vai subir com algumas variáveis vazias. Isso é esperado: as
 URLs públicas só existem depois que o Render cria os serviços.
+
+---
+
+## 2. Ou consertar um serviço que já existe
+
+Se você já criou os serviços à mão e não quer refazer, o `render.yaml` não vai
+ajudar: **ele só vale para serviços criados por um Blueprint.** Serviço feito à
+mão ignora esse arquivo para sempre.
+
+Nesse caso, aponte o Dockerfile na unha, em **Settings → Docker Build Context /
+Dockerfile Path** de cada serviço:
+
+| Serviço | Dockerfile Path |
+|---|---|
+| o do n8n | `./Dockerfile.n8n` |
+| o da Evolution | `./Dockerfile.evolution` |
+
+E preencha as variáveis do passo 3 na mão — inclusive as que o Blueprint geraria
+sozinho (`N8N_ENCRYPTION_KEY` e `AUTHENTICATION_API_KEY`, com
+`openssl rand -hex 32`), mais `PORT`/`N8N_PORT` = `5678` no n8n e
+`PORT`/`SERVER_PORT` = `8080` na Evolution.
+
+Só não esqueça: a `AUTHENTICATION_API_KEY` da Evolution tem que ser colada como
+`EVOLUTION_API_KEY` no n8n. No Blueprint isso é automático; à mão, não.
 
 ---
 
@@ -139,3 +168,8 @@ postgres, não a externa.
 
 **`Port scan timeout`** — o Render não achou a porta aberta. Verifique se `PORT`
 bate com `N8N_PORT` (5678) ou `SERVER_PORT` (8080) no serviço em questão.
+
+**`failed to read dockerfile: open Dockerfile: no such file or directory`** — o
+serviço está procurando `Dockerfile` na raiz, que não existe (são
+`Dockerfile.n8n` e `Dockerfile.evolution`). Ou o serviço foi criado à mão e não
+lê o `render.yaml` — veja o passo 2.

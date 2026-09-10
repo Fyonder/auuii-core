@@ -2,8 +2,13 @@
 #  AUUII CORE — Blueprint do Render
 #
 #  O Render NAO roda docker-compose. Cada peca vira um
-#  servico separado, e nenhuma delas precisa de Dockerfile:
-#  usamos `runtime: image` (imagem pronta do registry).
+#  servico separado, com runtime `docker`.
+#
+#  Os Dockerfile.n8n / Dockerfile.evolution na raiz nao
+#  constroem nada: cada um so faz `FROM` da imagem oficial,
+#  igual ao que o compose ja puxa. Existem porque o runtime
+#  Docker do Render exige um Dockerfile, e porque servico
+#  criado a mao no painel nasce nesse runtime.
 #
 #  Sobe 3 coisas:
 #    auuii-n8n        -> painel + webhooks do agente
@@ -32,11 +37,11 @@ services:
   # ----------------------------------------------------
   - type: web
     name: auuii-n8n
-    runtime: image
+    runtime: docker
+    dockerfilePath: ./Dockerfile.n8n
+    dockerContext: .
     plan: starter
     region: oregon
-    image:
-      url: docker.n8n.io/n8nio/n8n:latest
     disk:
       name: n8n-data
       mountPath: /home/node/.n8n
@@ -111,11 +116,11 @@ services:
   # ----------------------------------------------------
   - type: web
     name: auuii-evolution
-    runtime: image
+    runtime: docker
+    dockerfilePath: ./Dockerfile.evolution
+    dockerContext: .
     plan: starter
     region: oregon
-    image:
-      url: evoapicloud/evolution-api:latest
     disk:
       name: evolution-instances
       mountPath: /evolution/instances

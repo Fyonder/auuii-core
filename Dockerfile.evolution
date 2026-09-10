@@ -1,0 +1,7 @@
+# ==========================================================
+#  AUUII CORE — Evolution API para o Render
+#  Mesma ideia do Dockerfile.n8n: so aponta para a imagem
+#  pronta, porque o runtime Docker do Render exige um
+#  Dockerfile. Sem build proprio.
+# ==========================================================
+FROM evoapicloud/evolution-api:latest

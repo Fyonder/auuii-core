@@ -71,10 +71,12 @@ ficam expostas. O banco nunca é exposto.
 
 ### No Render
 
-O Render não roda `docker-compose`, e este repo não tem `Dockerfile` — cada peça
-vira um serviço separado usando a imagem pronta. O [`render.yaml`](render.yaml)
-já descreve os três (n8n, Evolution e o postgres dela): **New → Blueprint**,
-escolha o repo, `Apply`. Passo a passo e limites em
+O Render não roda `docker-compose`: cada peça vira um serviço separado. Os
+`Dockerfile.n8n` e `Dockerfile.evolution` são só ponteiros (`FROM`) para as
+mesmas imagens que o compose usa — não constroem nada, existem porque o runtime
+Docker do Render exige um Dockerfile. O [`render.yaml`](render.yaml) descreve os
+três recursos (n8n, Evolution e o postgres dela): **New → Blueprint**, escolha o
+repo, `Apply`. Passo a passo e limites em
 [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md).
 
 ---
@@ -181,7 +183,9 @@ auuii-core/
 ├── docker-compose.prod.yml    # camada de produção: Caddy + portas fechadas
 ├── Caddyfile                  # proxy reverso / HTTPS
 ├── deploy.sh                  # ./deploy.sh [prod]
-├── render.yaml                # blueprint do Render (sem compose, sem Dockerfile)
+├── render.yaml                # blueprint do Render (o compose não roda lá)
+├── Dockerfile.n8n             # ponteiro p/ a imagem oficial — o Render exige um
+├── Dockerfile.evolution       # idem, para a Evolution
 ├── .env / .env.example        # configuração
 ├── testar.sh                  # ./testar.sh [api|menu|cliente|motoboy|restaurante|qr]
 ├── n8n/workflows/             # o fluxo do agente, pronto para colar no canvas
