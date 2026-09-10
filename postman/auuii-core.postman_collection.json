@@ -1,0 +1,1098 @@
+{
+  "info": {
+    "_postman_id": "3a8a664d-8326-4de5-8490-3f8022fa4f7c",
+    "name": "AUUII Core API",
+    "description": "Agente Meu Sulporte.\n\nPASTA 1 - webhooks do n8n: manda uma mensagem como se fosse o WhatsApp.\n  O fluxo precisa estar ATIVO. /webhook-test/ vale uma chamada por clique\n  em Execute workflow.\n\nPASTA 2 - backend hospedado ({{apiUrl}}/api/suporte): as mesmas rotas que\n  as tools do agente consomem. Header x-suporte-api-key.\n\nANTES DE RODAR: preencha a variavel suporteKey na aba Variables com o\nSUPORTE_API_KEY do backend. Ela fica vazia no arquivo de proposito -\ne chave de producao e nao deve ser versionada.\n\nNao existe mais API local em localhost:3000: a API de negocio e a sua,\nhospedada.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "n8nUrl",
+      "value": "http://localhost:5678",
+      "type": "string"
+    },
+    {
+      "key": "apiUrl",
+      "value": "https://ifood.onrender.com",
+      "type": "string"
+    },
+    {
+      "key": "suporteKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tel",
+      "value": "557991367323",
+      "type": "string"
+    },
+    {
+      "key": "telCliente",
+      "value": "5544991080770",
+      "type": "string"
+    },
+    {
+      "key": "telMotoboy",
+      "value": "557991367323",
+      "type": "string"
+    },
+    {
+      "key": "telLoja",
+      "value": "5544999952380",
+      "type": "string"
+    },
+    {
+      "key": "telDesconhecido",
+      "value": "5500999000001",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Agente (n8n webhooks)",
+      "description": "POSTs que simulam uma mensagem chegando no agente, sem WhatsApp. Webhook UNICO: {{n8nUrl}}/webhook/auuii — o fluxo identifica o perfil pelo telefone (backend /api/suporte/identificar). Numero desconhecido recebe o menu (1 cliente / 2 entregador / 3 restaurante).\n\n- /webhook/auuii: funciona sempre que o fluxo estiver Active.\n- /webhook-test/auuii: so aceita UMA chamada depois de clicar em Execute workflow no editor.\n\nFormato simples {chatId, message}: a resposta volta no proprio HTTP (canal = teste). Formato Evolution: a resposta vai pelo WhatsApp.\nUse telefones reais cadastrados no backend (TESTE_TEL_* do .env) para cair no perfil certo.",
+      "item": [
+        {
+          "name": "Motoboy - producao",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{n8nUrl}}/webhook/auuii",
+              "host": [
+                "{{n8nUrl}}"
+              ],
+              "path": [
+                "webhook",
+                "auuii"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chatId\": \"5511990000001\",\n  \"message\": \"qual minha posicao na fila?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Fluxo precisa estar Active. Resposta esperada: {reply, handoff, chatId, canal}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 404) console.log('Webhook nao registrado: ligue a chave Active no fluxo (ou clique Execute workflow, se for /webhook-test).');",
+                  "if (pm.response.code === 500) console.log('Erro no fluxo: veja Executions no n8n. Confira se o fluxo importado e o n8n/workflows/meu-sulporte-unico.json atual (sem Structured Output Parser).');",
+                  "if (pm.response.code === 200) {",
+                  "  let d = pm.response.json(); if (Array.isArray(d)) d = d[0];",
+                  "  pm.test('tem reply', () => pm.expect(d).to.have.property('reply'));",
+                  "  pm.test('tem handoff', () => pm.expect(d).to.have.property('handoff'));",
+                  "  console.log('reply  :', d.reply); console.log('handoff:', d.handoff);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Motoboy - modo teste (Execute workflow antes)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{n8nUrl}}/webhook-test/auuii",
+              "host": [
+                "{{n8nUrl}}"
+              ],
+              "path": [
+                "webhook-test",
+                "auuii"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chatId\": \"5511990000001\",\n  \"message\": \"qual minha posicao na fila?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "1. Abra o fluxo no n8n e clique em Execute workflow.\n2. Envie este request em ate ~2 min.\n3. A execucao aparece no editor; a resposta volta aqui.\nCada clique vale para UMA chamada."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 404) console.log('Webhook nao registrado: ligue a chave Active no fluxo (ou clique Execute workflow, se for /webhook-test).');",
+                  "if (pm.response.code === 500) console.log('Erro no fluxo: veja Executions no n8n. Confira se o fluxo importado e o n8n/workflows/meu-sulporte-unico.json atual (sem Structured Output Parser).');",
+                  "if (pm.response.code === 200) {",
+                  "  let d = pm.response.json(); if (Array.isArray(d)) d = d[0];",
+                  "  pm.test('tem reply', () => pm.expect(d).to.have.property('reply'));",
+                  "  pm.test('tem handoff', () => pm.expect(d).to.have.property('handoff'));",
+                  "  console.log('reply  :', d.reply); console.log('handoff:', d.handoff);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Motoboy - formato Evolution (WhatsApp)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{n8nUrl}}/webhook/auuii",
+              "host": [
+                "{{n8nUrl}}"
+              ],
+              "path": [
+                "webhook",
+                "auuii"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"messages.upsert\",\n  \"instance\": \"auuii\",\n  \"data\": {\n    \"key\": {\n      \"remoteJid\": \"5511990000001@s.whatsapp.net\",\n      \"fromMe\": false,\n      \"id\": \"POSTMAN-TESTE-001\"\n    },\n    \"pushName\": \"Teste Postman\",\n    \"message\": {\n      \"conversation\": \"qual minha posicao na fila?\"\n    },\n    \"messageType\": \"conversation\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Mesmo payload que a Evolution API manda no evento messages.upsert. Passa pelo filtro de eco e, como canal = whatsapp, a resposta e enviada pela Evolution (instancia precisa estar conectada). O HTTP devolve o retorno do sendText."
+          }
+        },
+        {
+          "name": "Motoboy - eco do bot (deve ser ignorado)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{n8nUrl}}/webhook/auuii",
+              "host": [
+                "{{n8nUrl}}"
+              ],
+              "path": [
+                "webhook",
+                "auuii"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"messages.upsert\",\n  \"instance\": \"auuii\",\n  \"data\": {\n    \"key\": {\n      \"remoteJid\": \"5511990000001@s.whatsapp.net\",\n      \"fromMe\": true,\n      \"id\": \"POSTMAN-ECO-001\"\n    },\n    \"message\": {\n      \"conversation\": \"resposta que o proprio bot mandou\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "fromMe = true simula a mensagem que o proprio bot enviou. O fluxo deve ignorar e responder {ignorado: true}."
+          }
+        },
+        {
+          "name": "Cliente - producao (telefone cadastrado)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{n8nUrl}}/webhook/auuii",
+              "host": [
+                "{{n8nUrl}}"
+              ],
+              "path": [
+                "webhook",
+                "auuii"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chatId\": \"5511960000001\",\n  \"message\": \"oi, onde esta meu pedido?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Cai no agente do perfil que o backend identificar para este telefone; numero desconhecido recebe o menu."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 404) console.log('Webhook nao registrado: ligue a chave Active no fluxo (ou clique Execute workflow, se for /webhook-test).');",
+                  "if (pm.response.code === 500) console.log('Erro no fluxo: veja Executions no n8n. Confira se o fluxo importado e o n8n/workflows/meu-sulporte-unico.json atual (sem Structured Output Parser).');",
+                  "if (pm.response.code === 200) {",
+                  "  let d = pm.response.json(); if (Array.isArray(d)) d = d[0];",
+                  "  pm.test('tem reply', () => pm.expect(d).to.have.property('reply'));",
+                  "  pm.test('tem handoff', () => pm.expect(d).to.have.property('handoff'));",
+                  "  console.log('reply  :', d.reply); console.log('handoff:', d.handoff);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restaurante - producao (telefone cadastrado)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{n8nUrl}}/webhook/auuii",
+              "host": [
+                "{{n8nUrl}}"
+              ],
+              "path": [
+                "webhook",
+                "auuii"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chatId\": \"5511970000001\",\n  \"message\": \"tem entregador perto da loja agora?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Cai no agente do perfil que o backend identificar para este telefone; numero desconhecido recebe o menu."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 404) console.log('Webhook nao registrado: ligue a chave Active no fluxo (ou clique Execute workflow, se for /webhook-test).');",
+                  "if (pm.response.code === 500) console.log('Erro no fluxo: veja Executions no n8n. Confira se o fluxo importado e o n8n/workflows/meu-sulporte-unico.json atual (sem Structured Output Parser).');",
+                  "if (pm.response.code === 200) {",
+                  "  let d = pm.response.json(); if (Array.isArray(d)) d = d[0];",
+                  "  pm.test('tem reply', () => pm.expect(d).to.have.property('reply'));",
+                  "  pm.test('tem handoff', () => pm.expect(d).to.have.property('handoff'));",
+                  "  console.log('reply  :', d.reply); console.log('handoff:', d.handoff);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Menu - numero desconhecido (passo 1)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{n8nUrl}}/webhook/auuii",
+              "host": [
+                "{{n8nUrl}}"
+              ],
+              "path": [
+                "webhook",
+                "auuii"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chatId\": \"5500999000001\",\n  \"message\": \"oi\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Numero sem cadastro e sem pedido: o fluxo responde o menu 1/2/3."
+          }
+        },
+        {
+          "name": "Menu - escolhe 2 (passo 2)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{n8nUrl}}/webhook/auuii",
+              "host": [
+                "{{n8nUrl}}"
+              ],
+              "path": [
+                "webhook",
+                "auuii"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chatId\": \"5500999000001\",\n  \"message\": \"2\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Registra o numero como Entregador via PUT /api/suporte/identificar. Da proxima mensagem em diante vai direto ao agente motoboy. Para repetir o teste, use 'Identificar - esquecer' na pasta 6."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Backend Auuii (/api/suporte)",
+      "description": "Rotas do backend real (Auuii-Backend) que as tools do agente chamam. Só leitura, chaveadas por telefone.\n\nVariáveis:\n- apiUrl: https://ifood.onrender.com (produção) ou http://localhost:3002 (backend local)\n- suporteKey: valor de AUUII_API_TOKEN no .env (= SUPORTE_API_KEY no Render). Vazia por padrão: preencha.\n- tel: telefone de quem 'está falando' (qualquer formato). Troque conforme o perfil.\n\nContrato: 'não achei' é 200 {encontrado:false, motivo}. motivo 'ambiguo' traz opcoes[]; repita com &loja= (loja) ou &escolha= (motoboy).",
+      "item": [
+        {
+          "name": "Identificar - quem e este telefone",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/identificar?telefone={{tel}}",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "identificar"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{tel}}"
+                }
+              ]
+            },
+            "description": "perfil: cliente | motoboy | restaurante | null (desconhecido → menu). origem: cadastro | menu | pedido."
+          }
+        },
+        {
+          "name": "Identificar - gravar escolha do menu",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/identificar?telefone={{tel}}",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "identificar"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{tel}}"
+                }
+              ]
+            },
+            "description": "Grava a escolha em suporte_contatos. perfil: cliente | motoboy | restaurante.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"perfil\": \"motoboy\",\n  \"nome\": \"Teste\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Identificar - esquecer",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/identificar?telefone={{tel}}",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "identificar"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{tel}}"
+                }
+              ]
+            },
+            "description": "Apaga a escolha gravada (para testar o menu de novo com o mesmo numero)."
+          }
+        },
+        {
+          "name": "Cliente - meu pedido",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 401) console.log('Chave errada: suporteKey precisa ser igual a SUPORTE_API_KEY do backend (AUUII_API_TOKEN no .env).');",
+                  "if (pm.response.code === 503) console.log('Backend sem SUPORTE_API_KEY definida.');",
+                  "if (pm.response.code === 200) {",
+                  "  const d = pm.response.json();",
+                  "  pm.test('tem campo encontrado', () => pm.expect(d).to.have.property('encontrado'));",
+                  "  if (d.encontrado === false) console.log('encontrado:false ->', d.motivo, d.opcoes ? JSON.stringify(d.opcoes) : '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/cliente/pedido?telefone={{tel}}",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "cliente",
+                "pedido"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{tel}}"
+                }
+              ]
+            },
+            "description": "Pedido em andamento (ou o mais recente dos últimos 2 dias) do telefone."
+          }
+        },
+        {
+          "name": "Motoboy - perfil",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 401) console.log('Chave errada: suporteKey precisa ser igual a SUPORTE_API_KEY do backend (AUUII_API_TOKEN no .env).');",
+                  "if (pm.response.code === 503) console.log('Backend sem SUPORTE_API_KEY definida.');",
+                  "if (pm.response.code === 200) {",
+                  "  const d = pm.response.json();",
+                  "  pm.test('tem campo encontrado', () => pm.expect(d).to.have.property('encontrado'));",
+                  "  if (d.encontrado === false) console.log('encontrado:false ->', d.motivo, d.opcoes ? JSON.stringify(d.opcoes) : '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/motoboy/perfil?telefone={{tel}}",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "motoboy",
+                "perfil"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{tel}}"
+                },
+                {
+                  "key": "escolha",
+                  "value": "nome ou id do cadastro (so quando ambiguo)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Nome, online, ativo/bloqueado, situação do cadastro."
+          }
+        },
+        {
+          "name": "Motoboy - fila",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 401) console.log('Chave errada: suporteKey precisa ser igual a SUPORTE_API_KEY do backend (AUUII_API_TOKEN no .env).');",
+                  "if (pm.response.code === 503) console.log('Backend sem SUPORTE_API_KEY definida.');",
+                  "if (pm.response.code === 200) {",
+                  "  const d = pm.response.json();",
+                  "  pm.test('tem campo encontrado', () => pm.expect(d).to.have.property('encontrado'));",
+                  "  if (d.encontrado === false) console.log('encontrado:false ->', d.motivo, d.opcoes ? JSON.stringify(d.opcoes) : '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/motoboy/fila?telefone={{tel}}",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "motoboy",
+                "fila"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{tel}}"
+                },
+                {
+                  "key": "escolha",
+                  "value": "nome ou id do cadastro (so quando ambiguo)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Base, posição, total na fila, minutos de espera."
+          }
+        },
+        {
+          "name": "Motoboy - corrida atual",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 401) console.log('Chave errada: suporteKey precisa ser igual a SUPORTE_API_KEY do backend (AUUII_API_TOKEN no .env).');",
+                  "if (pm.response.code === 503) console.log('Backend sem SUPORTE_API_KEY definida.');",
+                  "if (pm.response.code === 200) {",
+                  "  const d = pm.response.json();",
+                  "  pm.test('tem campo encontrado', () => pm.expect(d).to.have.property('encontrado'));",
+                  "  if (d.encontrado === false) console.log('encontrado:false ->', d.motivo, d.opcoes ? JSON.stringify(d.opcoes) : '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/motoboy/corrida?telefone={{tel}}",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "motoboy",
+                "corrida"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{tel}}"
+                },
+                {
+                  "key": "escolha",
+                  "value": "nome ou id do cadastro (so quando ambiguo)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Pedidos atribuídos em andamento e paradas da rota."
+          }
+        },
+        {
+          "name": "Motoboy - semana",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 401) console.log('Chave errada: suporteKey precisa ser igual a SUPORTE_API_KEY do backend (AUUII_API_TOKEN no .env).');",
+                  "if (pm.response.code === 503) console.log('Backend sem SUPORTE_API_KEY definida.');",
+                  "if (pm.response.code === 200) {",
+                  "  const d = pm.response.json();",
+                  "  pm.test('tem campo encontrado', () => pm.expect(d).to.have.property('encontrado'));",
+                  "  if (d.encontrado === false) console.log('encontrado:false ->', d.motivo, d.opcoes ? JSON.stringify(d.opcoes) : '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/motoboy/semana?telefone={{tel}}",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "motoboy",
+                "semana"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{tel}}"
+                },
+                {
+                  "key": "semana",
+                  "value": "passada",
+                  "disabled": true
+                },
+                {
+                  "key": "escolha",
+                  "value": "nome ou id do cadastro (so quando ambiguo)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Corridas e valores da semana. semana=passada para a anterior."
+          }
+        },
+        {
+          "name": "Loja - perfil",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 401) console.log('Chave errada: suporteKey precisa ser igual a SUPORTE_API_KEY do backend (AUUII_API_TOKEN no .env).');",
+                  "if (pm.response.code === 503) console.log('Backend sem SUPORTE_API_KEY definida.');",
+                  "if (pm.response.code === 200) {",
+                  "  const d = pm.response.json();",
+                  "  pm.test('tem campo encontrado', () => pm.expect(d).to.have.property('encontrado'));",
+                  "  if (d.encontrado === false) console.log('encontrado:false ->', d.motivo, d.opcoes ? JSON.stringify(d.opcoes) : '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/loja/perfil?telefone={{tel}}",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "loja",
+                "perfil"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{tel}}"
+                },
+                {
+                  "key": "loja",
+                  "value": "nome ou id da loja (so quando a resposta anterior veio ambiguo)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Nome, cidade, aprovada, pós-pago."
+          }
+        },
+        {
+          "name": "Loja - pedidos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 401) console.log('Chave errada: suporteKey precisa ser igual a SUPORTE_API_KEY do backend (AUUII_API_TOKEN no .env).');",
+                  "if (pm.response.code === 503) console.log('Backend sem SUPORTE_API_KEY definida.');",
+                  "if (pm.response.code === 200) {",
+                  "  const d = pm.response.json();",
+                  "  pm.test('tem campo encontrado', () => pm.expect(d).to.have.property('encontrado'));",
+                  "  if (d.encontrado === false) console.log('encontrado:false ->', d.motivo, d.opcoes ? JSON.stringify(d.opcoes) : '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/loja/pedidos?telefone={{tel}}&status=andamento",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "loja",
+                "pedidos"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{tel}}"
+                },
+                {
+                  "key": "status",
+                  "value": "andamento"
+                },
+                {
+                  "key": "loja",
+                  "value": "nome ou id da loja (so quando a resposta anterior veio ambiguo)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "status: andamento (padrão), prontos, sem_entregador, entregues, cancelados, todos."
+          }
+        },
+        {
+          "name": "Loja - entregadores",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 401) console.log('Chave errada: suporteKey precisa ser igual a SUPORTE_API_KEY do backend (AUUII_API_TOKEN no .env).');",
+                  "if (pm.response.code === 503) console.log('Backend sem SUPORTE_API_KEY definida.');",
+                  "if (pm.response.code === 200) {",
+                  "  const d = pm.response.json();",
+                  "  pm.test('tem campo encontrado', () => pm.expect(d).to.have.property('encontrado'));",
+                  "  if (d.encontrado === false) console.log('encontrado:false ->', d.motivo, d.opcoes ? JSON.stringify(d.opcoes) : '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/loja/entregadores?telefone={{tel}}&raio=5",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "loja",
+                "entregadores"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{tel}}"
+                },
+                {
+                  "key": "raio",
+                  "value": "5"
+                },
+                {
+                  "key": "loja",
+                  "value": "nome ou id da loja (so quando a resposta anterior veio ambiguo)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Contagens: fila da base, online perto da loja (raio km), online na cidade."
+          }
+        },
+        {
+          "name": "Loja - semana",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 401) console.log('Chave errada: suporteKey precisa ser igual a SUPORTE_API_KEY do backend (AUUII_API_TOKEN no .env).');",
+                  "if (pm.response.code === 503) console.log('Backend sem SUPORTE_API_KEY definida.');",
+                  "if (pm.response.code === 200) {",
+                  "  const d = pm.response.json();",
+                  "  pm.test('tem campo encontrado', () => pm.expect(d).to.have.property('encontrado'));",
+                  "  if (d.encontrado === false) console.log('encontrado:false ->', d.motivo, d.opcoes ? JSON.stringify(d.opcoes) : '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/loja/semana?telefone={{tel}}",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "loja",
+                "semana"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{tel}}"
+                },
+                {
+                  "key": "semana",
+                  "value": "passada",
+                  "disabled": true
+                },
+                {
+                  "key": "loja",
+                  "value": "nome ou id da loja (so quando a resposta anterior veio ambiguo)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Entregas, taxas e status da fatura da semana."
+          }
+        },
+        {
+          "name": "Sem chave (deve dar 401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 sem chave', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/motoboy/perfil?telefone={{tel}}",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "motoboy",
+                "perfil"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{tel}}"
+                }
+              ]
+            },
+            "description": "Confere que o backend está fechado sem a chave."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+# ==========================================================
+#  AUUII CORE — camada de PRODUÇÃO (VPS)
+#  Adiciona o Caddy (HTTPS automático) e fecha as portas
+#  diretas: só a 80/443 fica exposta na internet.
+#
+#  Uso:
+#    docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#  (ou simplesmente ./deploy.sh)
+# ==========================================================
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: auuii-caddy
+    restart: unless-stopped
+    depends_on:
+      - n8n
+      - evolution
+    environment:
+      N8N_DOMAIN: ${N8N_DOMAIN}
+      EVOLUTION_DOMAIN: ${EVOLUTION_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - auuii-net
+
+  # na VPS o acesso passa só pelo Caddy
+  evolution:
+    ports: !reset []
+
+  n8n:
+    environment:
+      N8N_PROXY_HOPS: "1"
+    ports: !reset []
+
+volumes:
+  caddy_data:
+  caddy_config:

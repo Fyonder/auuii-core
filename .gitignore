@@ -1,0 +1,5 @@
+.env
+.env.bak*
+n8n/files/
+*.log
+qrcode-*.png

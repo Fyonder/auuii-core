@@ -1,0 +1,115 @@
+# ==========================================================
+#  AUUII CORE — n8n + Evolution API na mesma rede Docker
+#
+#  Só o que importa:
+#    n8n       -> http://localhost:5678
+#    evolution -> http://localhost:8080
+#
+#  Entre eles, pela rede interna auuii-net:
+#    n8n chama a Evolution em ......... http://evolution:8080
+#    Evolution chama o n8n em ......... http://n8n:5678
+#
+#  (o postgres abaixo existe só porque a Evolution v2 não
+#   inicia sem ele — você não precisa mexer nele)
+#
+#  A API de negócio NÃO mora aqui: é o seu backend hospedado,
+#  em AUUII_API_URL. O n8n chama /api/suporte/* nele.
+# ==========================================================
+name: auuii
+
+services:
+  # ----------------------------------------------------
+  # n8n — o cérebro do agente. Usa SQLite, sem banco externo.
+  # ----------------------------------------------------
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:${N8N_TAG:-latest}
+    container_name: auuii-n8n
+    restart: unless-stopped
+    environment:
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      N8N_WEBHOOK_URL: ${N8N_PUBLIC_URL:-http://localhost:5678}
+      N8N_EDITOR_BASE_URL: ${N8N_PUBLIC_URL:-http://localhost:5678}
+      GENERIC_TIMEZONE: ${TZ:-America/Sao_Paulo}
+      TZ: ${TZ:-America/Sao_Paulo}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_COMMUNITY_PACKAGES_ENABLED: "true"
+      N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE: "true"
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: ${N8N_EXECUTIONS_MAX_AGE_HOURS:-336}
+      # permite ler variaveis com {{ $env.NOME }} dentro dos nos
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      # atalhos prontos para usar dentro dos fluxos:
+      #   {{ $env.EVOLUTION_API_URL }}  e  {{ $env.EVOLUTION_API_KEY }}
+      EVOLUTION_API_URL: http://evolution:8080
+      EVOLUTION_API_KEY: ${AUTHENTICATION_API_KEY}
+      # sua API (motoboys, fila, corridas) — usada pelas tools do agente
+      #   {{ $env.AUUII_API_URL }}  e  {{ $env.AUUII_API_TOKEN }}
+      AUUII_API_URL: ${AUUII_API_URL:-}
+      AUUII_API_TOKEN: ${AUUII_API_TOKEN:-}
+      # instancia do WhatsApp e numero do suporte humano (handoff)
+      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-auuii}
+      SUPORTE_WHATSAPP: ${SUPORTE_WHATSAPP:-}
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - auuii-net
+
+  # ----------------------------------------------------
+  # Evolution API — a ponte com o WhatsApp
+  # ----------------------------------------------------
+  evolution:
+    image: evoapicloud/evolution-api:${EVOLUTION_TAG:-latest}
+    container_name: auuii-evolution
+    restart: unless-stopped
+    depends_on:
+      evolution-db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      SERVER_URL: ${EVOLUTION_PUBLIC_URL:-http://localhost:8080}
+      DATABASE_CONNECTION_URI: postgresql://evolution:${EVOLUTION_DB_PASSWORD}@evolution-db:5432/evolution?schema=public
+      N8N_ENABLED: "true"
+    ports:
+      - "${EVOLUTION_PORT:-8080}:8080"
+    volumes:
+      - evolution_instances:/evolution/instances
+    networks:
+      - auuii-net
+
+  # ----------------------------------------------------
+  # Peça interna da Evolution. Sem porta exposta.
+  # A v2 roda migrations no boot e não inicia sem isso.
+  # ----------------------------------------------------
+  evolution-db:
+    image: postgres:16-alpine
+    container_name: auuii-evolution-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${EVOLUTION_DB_PASSWORD}
+      POSTGRES_DB: evolution
+    volumes:
+      - evolution_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution -d evolution"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - auuii-net
+
+volumes:
+  n8n_data:
+  evolution_instances:
+  evolution_db:
+
+networks:
+  auuii-net:
+    name: auuii-net
+    driver: bridge

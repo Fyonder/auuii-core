@@ -1,0 +1,19 @@
+# ==========================================================
+#  AUUII CORE — proxy reverso com HTTPS automático
+#  Os domínios vêm do .env (N8N_DOMAIN / EVOLUTION_DOMAIN)
+# ==========================================================
+{
+	email {$ACME_EMAIL}
+}
+
+# Painel e webhooks do n8n
+{$N8N_DOMAIN} {
+	reverse_proxy n8n:5678 {
+		flush_interval -1
+	}
+}
+
+# Evolution API (WhatsApp)
+{$EVOLUTION_DOMAIN} {
+	reverse_proxy evolution:8080
+}
