@@ -166,6 +166,11 @@ E remova o bloco `disk:` do `auuii-n8n` no `render.yaml`.
 `DATABASE_CONNECTION_URI` está apontando para a *Internal Database URL* do
 postgres, não a externa.
 
+**`429 Too Many Requests` no build do n8n** — o registry `docker.n8n.io` limita
+os IPs de build do Render. Por isso o `Dockerfile.n8n` puxa de `n8nio/n8n` no
+Docker Hub, e não de `docker.n8n.io/n8nio/n8n` como o `docker-compose.yml`. É a
+mesma imagem, publicada nos dois lugares.
+
 **`Port scan timeout`** — o Render não achou a porta aberta. Verifique se `PORT`
 bate com `N8N_PORT` (5678) ou `SERVER_PORT` (8080) no serviço em questão.
 

@@ -9,5 +9,10 @@
 #  Dockerfile mesmo quando a imagem ja esta pronta.
 #  Na VPS isso nao e usado: la o docker-compose puxa a
 #  imagem direto.
+#
+#  Puxamos do Docker Hub (n8nio/n8n), nao de docker.n8n.io
+#  como no compose: o registry proprio da n8n devolve
+#  429 Too Many Requests para os IPs de build do Render.
+#  E a mesma imagem, publicada nos dois lugares.
 # ==========================================================
-FROM docker.n8n.io/n8nio/n8n:latest
+FROM n8nio/n8n:latest
