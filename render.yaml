@@ -1,0 +1,180 @@
+# ==========================================================
+#  AUUII CORE — Blueprint do Render
+#
+#  O Render NAO roda docker-compose. Cada peca vira um
+#  servico separado, e nenhuma delas precisa de Dockerfile:
+#  usamos `runtime: image` (imagem pronta do registry).
+#
+#  Sobe 3 coisas:
+#    auuii-n8n        -> painel + webhooks do agente
+#    auuii-evolution  -> ponte com o WhatsApp
+#    auuii-evolution-db -> postgres da Evolution (v2 nao sobe sem)
+#
+#  Aqui nao existe rede interna como no compose: os dois
+#  servicos se enxergam pela URL publica *.onrender.com.
+#
+#  Depois do primeiro deploy, preencha no painel as vars
+#  marcadas com `sync: false` (ver docs/DEPLOY-RENDER.md).
+# ==========================================================
+
+databases:
+  - name: auuii-evolution-db
+    databaseName: evolution
+    user: evolution
+    plan: basic-256mb
+    region: oregon
+
+services:
+  # ----------------------------------------------------
+  # n8n — o cerebro do agente.
+  # Disco de 1 GB montado no /home/node/.n8n (SQLite +
+  # credenciais). Sem disco, cada deploy zera tudo.
+  # ----------------------------------------------------
+  - type: web
+    name: auuii-n8n
+    runtime: image
+    plan: starter
+    region: oregon
+    image:
+      url: docker.n8n.io/n8nio/n8n:latest
+    disk:
+      name: n8n-data
+      mountPath: /home/node/.n8n
+      sizeGB: 1
+    healthCheckPath: /healthz
+    envVars:
+      # o Render escuta a porta que estiver em PORT
+      - key: PORT
+        value: 5678
+      - key: N8N_PORT
+        value: 5678
+      - key: N8N_PROTOCOL
+        value: https
+      - key: N8N_PROXY_HOPS
+        value: 1
+      - key: GENERIC_TIMEZONE
+        value: America/Sao_Paulo
+      - key: TZ
+        value: America/Sao_Paulo
+      - key: N8N_DIAGNOSTICS_ENABLED
+        value: "false"
+      - key: N8N_COMMUNITY_PACKAGES_ENABLED
+        value: "true"
+      - key: N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE
+        value: "true"
+      - key: EXECUTIONS_DATA_PRUNE
+        value: "true"
+      - key: EXECUTIONS_DATA_MAX_AGE
+        value: 336
+      # permite ler variaveis com {{ $env.NOME }} dentro dos nos
+      - key: N8N_BLOCK_ENV_ACCESS_IN_NODE
+        value: "false"
+
+      # se mudar, perde as credenciais salvas. gerada uma vez.
+      - key: N8N_ENCRYPTION_KEY
+        generateValue: true
+
+      # a chave da Evolution vem do proprio servico da Evolution
+      - key: EVOLUTION_API_KEY
+        fromService:
+          type: web
+          name: auuii-evolution
+          envVarKey: AUTHENTICATION_API_KEY
+
+      # ---- preencher no painel apos o 1o deploy ----
+      # https://auuii-n8n.onrender.com
+      - key: N8N_HOST
+        sync: false
+      - key: N8N_PUBLIC_URL
+        sync: false
+      - key: N8N_WEBHOOK_URL
+        sync: false
+      - key: N8N_EDITOR_BASE_URL
+        sync: false
+      # https://auuii-evolution.onrender.com  (no compose era http://evolution:8080)
+      - key: EVOLUTION_API_URL
+        sync: false
+      # sua API de negocio (motoboys, fila, corridas)
+      - key: AUUII_API_URL
+        sync: false
+      - key: AUUII_API_TOKEN
+        sync: false
+      - key: EVOLUTION_INSTANCE
+        value: auuii
+      - key: SUPORTE_WHATSAPP
+        sync: false
+
+  # ----------------------------------------------------
+  # Evolution API — a ponte com o WhatsApp.
+  # O disco guarda a sessao do numero: sem ele, todo
+  # restart pede QR code de novo.
+  # ----------------------------------------------------
+  - type: web
+    name: auuii-evolution
+    runtime: image
+    plan: starter
+    region: oregon
+    image:
+      url: evoapicloud/evolution-api:latest
+    disk:
+      name: evolution-instances
+      mountPath: /evolution/instances
+      sizeGB: 1
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: SERVER_PORT
+        value: 8080
+      - key: TZ
+        value: America/Sao_Paulo
+
+      # chave global da Evolution (header: apikey).
+      # o n8n le esta mesma variavel via fromService.
+      - key: AUTHENTICATION_API_KEY
+        generateValue: true
+
+      - key: DATABASE_ENABLED
+        value: "true"
+      - key: DATABASE_PROVIDER
+        value: postgresql
+      - key: DATABASE_CONNECTION_CLIENT_NAME
+        value: evolution_exchange
+      - key: DATABASE_CONNECTION_URI
+        fromDatabase:
+          name: auuii-evolution-db
+          property: connectionString
+
+      - key: DATABASE_SAVE_DATA_INSTANCE
+        value: "true"
+      - key: DATABASE_SAVE_DATA_NEW_MESSAGE
+        value: "true"
+      - key: DATABASE_SAVE_MESSAGE_UPDATE
+        value: "true"
+      - key: DATABASE_SAVE_DATA_CONTACTS
+        value: "true"
+      - key: DATABASE_SAVE_DATA_CHATS
+        value: "true"
+      - key: DATABASE_SAVE_DATA_LABELS
+        value: "true"
+      - key: DATABASE_SAVE_DATA_HISTORIC
+        value: "true"
+
+      # sem redis nesta stack: cache local
+      - key: CACHE_REDIS_ENABLED
+        value: "false"
+      - key: CACHE_LOCAL_ENABLED
+        value: "true"
+
+      - key: N8N_ENABLED
+        value: "true"
+      - key: CONFIG_SESSION_PHONE_VERSION
+        value: 2.3000.1015901307
+      - key: LOG_LEVEL
+        value: ERROR
+      - key: LOG_BAILEYS
+        value: error
+
+      # ---- preencher no painel apos o 1o deploy ----
+      # https://auuii-evolution.onrender.com
+      - key: SERVER_URL
+        sync: false

@@ -69,6 +69,14 @@ sozinho. Passo a passo em [docs/DEPLOY-VPS.md](docs/DEPLOY-VPS.md).
 No modo `prod` as portas 5678 e 8080 **deixam de ser publicadas**: só 80/443
 ficam expostas. O banco nunca é exposto.
 
+### No Render
+
+O Render não roda `docker-compose`, e este repo não tem `Dockerfile` — cada peça
+vira um serviço separado usando a imagem pronta. O [`render.yaml`](render.yaml)
+já descreve os três (n8n, Evolution e o postgres dela): **New → Blueprint**,
+escolha o repo, `Apply`. Passo a passo e limites em
+[docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md).
+
 ---
 
 ## Variáveis principais (`.env`)
@@ -173,9 +181,10 @@ auuii-core/
 ├── docker-compose.prod.yml    # camada de produção: Caddy + portas fechadas
 ├── Caddyfile                  # proxy reverso / HTTPS
 ├── deploy.sh                  # ./deploy.sh [prod]
+├── render.yaml                # blueprint do Render (sem compose, sem Dockerfile)
 ├── .env / .env.example        # configuração
 ├── testar.sh                  # ./testar.sh [api|menu|cliente|motoboy|restaurante|qr]
 ├── n8n/workflows/             # o fluxo do agente, pronto para colar no canvas
 ├── postman/                   # n8n + backend hospedado
-└── docs/                      # deploy na VPS, integração e contrato da API
+└── docs/                      # deploy (VPS e Render), integração e contrato da API
 ```
