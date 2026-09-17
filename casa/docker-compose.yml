@@ -1,0 +1,71 @@
+# ==========================================================
+#  CASA — serviços do PC de casa que NÃO fazem parte do agente
+#
+#  Isto é separado de propósito. A stack do agente
+#  (../docker-compose.yml) sobe sozinha e não depende daqui.
+#  Sobem juntas na mesma máquina, em redes diferentes.
+#
+#    adguard      -> DNS da rede + bloqueio de anúncios
+#    filebrowser  -> gerenciador de arquivos pelo navegador
+#
+#  O compartilhamento Samba NÃO está aqui: ele roda nativo
+#  no sistema (apt install samba). Em container ele precisa
+#  de rede host e ainda atrapalha a descoberta no Windows —
+#  não ganha nada. Ver docs/DEPLOY-CASA.md.
+#
+#  Uso:
+#    cd casa && cp .env.example .env && docker compose up -d
+# ==========================================================
+name: casa
+
+services:
+  # ----------------------------------------------------
+  # AdGuard Home — DNS de toda a rede.
+  #
+  # network_mode: host é necessário: sem ele, todo cliente
+  # aparece como o gateway do Docker e você perde a lista
+  # de quem pediu o quê (e as regras por dispositivo).
+  #
+  # Portas que ele ocupa no host:
+  #   53      DNS (precisa liberar do systemd-resolved antes)
+  #   3000    assistente de instalação, só na primeira vez
+  #   8081    painel, depois de configurado
+  # ----------------------------------------------------
+  adguard:
+    image: adguard/adguardhome:latest
+    container_name: casa-adguard
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - adguard_work:/opt/adguardhome/work
+      - adguard_conf:/opt/adguardhome/conf
+
+  # ----------------------------------------------------
+  # File Browser — os mesmos arquivos do Samba, mas pelo
+  # navegador. Útil no celular, onde montar pasta de rede
+  # é chato.
+  #
+  # PASTA_ARQUIVOS aponta para o mesmo diretório que o
+  # Samba compartilha. Os dois enxergam os mesmos arquivos.
+  # ----------------------------------------------------
+  filebrowser:
+    image: filebrowser/filebrowser:s6
+    container_name: casa-filebrowser
+    restart: unless-stopped
+    environment:
+      # roda com o mesmo dono dos arquivos, senão o Samba
+      # grava coisas que o File Browser não consegue apagar
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+    ports:
+      - "${FILEBROWSER_PORT:-8082}:80"
+    volumes:
+      - ${PASTA_ARQUIVOS:?defina PASTA_ARQUIVOS no .env}:/srv
+      - filebrowser_db:/database
+      - filebrowser_config:/config
+
+volumes:
+  adguard_work:
+  adguard_conf:
+  filebrowser_db:
+  filebrowser_config:

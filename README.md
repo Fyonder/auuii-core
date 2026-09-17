@@ -69,6 +69,15 @@ sozinho. Passo a passo em [docs/DEPLOY-VPS.md](docs/DEPLOY-VPS.md).
 No modo `prod` as portas 5678 e 8080 **deixam de ser publicadas**: só 80/443
 ficam expostas. O banco nunca é exposto.
 
+### No PC de casa
+
+A stack não precisa de **nenhuma porta aberta para a internet**: a Evolution abre
+o WebSocket do WhatsApp de dentro pra fora, e ela fala com o n8n pela rede
+interna do Docker. Sem domínio, sem certificado, sem port-forward — CGNAT e IP
+dinâmico deixam de importar. Use `./deploy.sh` (sem `prod`). Passo a passo,
+incluindo conviver com AdGuard Home e compartilhamento de arquivos na mesma
+máquina, em [docs/DEPLOY-CASA.md](docs/DEPLOY-CASA.md).
+
 ### Na Oracle Cloud (Always Free)
 
 A VM ARM Ampere A1 do Always Free (até 4 vCPU / 24 GB, sem prazo) roda a stack
@@ -189,6 +198,7 @@ auuii-core/
 ├── docker-compose.prod.yml    # camada de produção: Caddy + portas fechadas
 ├── Caddyfile                  # proxy reverso / HTTPS
 ├── deploy.sh                  # ./deploy.sh [prod]
+├── casa/                      # AdGuard + File Browser (PC de casa, fora da stack)
 ├── render.yaml                # blueprint do Render (o compose não roda lá)
 ├── Dockerfile.n8n             # ponteiro p/ a imagem oficial — o Render exige um
 ├── Dockerfile.evolution       # idem, para a Evolution
@@ -196,5 +206,5 @@ auuii-core/
 ├── testar.sh                  # ./testar.sh [api|menu|cliente|motoboy|restaurante|qr]
 ├── n8n/workflows/             # o fluxo do agente, pronto para colar no canvas
 ├── postman/                   # n8n + backend hospedado
-└── docs/                      # deploy (VPS, Oracle, Render), integração e contrato da API
+└── docs/                      # deploy (casa, VPS, Oracle, Render), integração e contrato da API
 ```
