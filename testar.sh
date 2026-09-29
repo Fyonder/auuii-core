@@ -53,13 +53,15 @@ perguntar() {
 
 	local corpo resposta http
 	corpo=$(printf '{"chatId":"%s","message":"%s"}' "$telefone" "$texto")
-	resposta=$(curl -s -m 120 -w '\n%{http_code}' -X POST "$N8N/webhook/auuii" \
+	# /auuii-teste espera o fluxo terminar e devolve a resposta. O /auuii (o da
+	# Evolution) responde na hora, sem a resposta: por isso o teste nao usa ele.
+	resposta=$(curl -s -m 120 -w '\n%{http_code}' -X POST "$N8N/webhook/auuii-teste" \
 		-H 'Content-Type: application/json' -d "$corpo")
 	http=$(printf '%s' "$resposta" | tail -n1)
 	resposta=$(printf '%s' "$resposta" | sed '$d')
 
 	if [ "$http" = "404" ]; then
-		vermelho "   x webhook /auuii nao registrado"
+		vermelho "   x webhook /auuii-teste nao registrado"
 		echo "     Ligue a chave Active no fluxo Meu Sulporte e rode de novo."
 		return 1
 	fi
@@ -157,10 +159,10 @@ testar_menu() {
 	# garante que o backend nao lembra dele
 	curl -s -m 30 -o /dev/null -X DELETE -H "x-suporte-api-key: $API_TOKEN" "$API_LOCAL/api/suporte/identificar?telefone=$tel"
 	local r1 r2
-	r1=$(curl -s -m 120 -X POST "$N8N/webhook/auuii" -H 'Content-Type: application/json' -d "{\"chatId\":\"$tel\",\"message\":\"oi\"}")
+	r1=$(curl -s -m 120 -X POST "$N8N/webhook/auuii-teste" -H 'Content-Type: application/json' -d "{\"chatId\":\"$tel\",\"message\":\"oi\"}")
 	if printf '%s' "$r1" | grep -q "1 - Cliente"; then verde "   ok   menu apareceu para numero desconhecido"
 	else vermelho "   x esperava o menu, veio: $(printf '%s' "$r1" | cut -c1-200)"; return 1; fi
-	r2=$(curl -s -m 120 -X POST "$N8N/webhook/auuii" -H 'Content-Type: application/json' -d "{\"chatId\":\"$tel\",\"message\":\"2\"}")
+	r2=$(curl -s -m 120 -X POST "$N8N/webhook/auuii-teste" -H 'Content-Type: application/json' -d "{\"chatId\":\"$tel\",\"message\":\"2\"}")
 	if printf '%s' "$r2" | grep -q "registrei"; then verde "   ok   escolha 2 registrada como Entregador"
 	else vermelho "   x esperava confirmacao, veio: $(printf '%s' "$r2" | cut -c1-200)"; return 1; fi
 	local id
