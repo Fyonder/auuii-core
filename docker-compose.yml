@@ -34,6 +34,15 @@ services:
       GENERIC_TIMEZONE: ${TZ:-America/Sao_Paulo}
       TZ: ${TZ:-America/Sao_Paulo}
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      # Sem HTTPS, o n8n se recusa a emitir o cookie de sessao fora de
+      # localhost — e o painel nao deixa entrar pelo IP da rede. Em rede
+      # local sem dominio, desligue (N8N_SECURE_COOKIE=false no .env).
+      # No modo prod, com Caddy e HTTPS, deixe true.
+      N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE:-true}
+      # info (padrao) fala no boot e quando um fluxo roda. Para investigar
+      # um fluxo que nao dispara, suba para debug — fica muito verboso,
+      # entao volte para info depois. Niveis: error warn info verbose debug
+      N8N_LOG_LEVEL: ${N8N_LOG_LEVEL:-info}
       N8N_DIAGNOSTICS_ENABLED: "false"
       N8N_COMMUNITY_PACKAGES_ENABLED: "true"
       N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE: "true"
@@ -53,7 +62,11 @@ services:
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-auuii}
       SUPORTE_WHATSAPP: ${SUPORTE_WHATSAPP:-}
     ports:
-      - "${N8N_PORT:-5678}:5678"
+      # BIND_ADDR limita quem alcanca a porta. Vazio/0.0.0.0 = qualquer um
+      # na Wi-Fi. Com o IP do Tailscale, so os aparelhos da rede privada —
+      # de dentro ou de fora de casa. O agente nao depende disto: n8n e
+      # Evolution conversam pela rede interna do Docker, nao por estas portas.
+      - "${BIND_ADDR:-0.0.0.0}:${N8N_PORT:-5678}:5678"
     volumes:
       - n8n_data:/home/node/.n8n
     networks:
@@ -76,7 +89,7 @@ services:
       DATABASE_CONNECTION_URI: postgresql://evolution:${EVOLUTION_DB_PASSWORD}@evolution-db:5432/evolution?schema=public
       N8N_ENABLED: "true"
     ports:
-      - "${EVOLUTION_PORT:-8080}:8080"
+      - "${BIND_ADDR:-0.0.0.0}:${EVOLUTION_PORT:-8080}:8080"
     volumes:
       - evolution_instances:/evolution/instances
     networks:
