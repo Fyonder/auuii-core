@@ -88,6 +88,18 @@ services:
       SERVER_URL: ${EVOLUTION_PUBLIC_URL:-http://localhost:8080}
       DATABASE_CONNECTION_URI: postgresql://evolution:${EVOLUTION_DB_PASSWORD}@evolution-db:5432/evolution?schema=public
       N8N_ENABLED: "true"
+      # Webhook GLOBAL -> ponte (aba Atendimento do painel). E independente do
+      # webhook da instancia, que vai pro n8n: a Evolution dispara os dois (sao
+      # dois `if` separados no webhook.controller). Desligado por padrao — liga
+      # junto com a ponte (PONTE_ATIVA=true e COMPOSE_PROFILES=ponte no .env).
+      # Ligar sem a ponte de pe faz a Evolution tentar e re-tentar cada evento.
+      WEBHOOK_GLOBAL_ENABLED: ${PONTE_ATIVA:-false}
+      WEBHOOK_GLOBAL_URL: http://ponte:3100/evolution/${PONTE_WEBHOOK_SECRET:-desligado}
+      WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS: "false"
+      # So o que vira conversa. Estes flags valem so pro global; o da instancia
+      # tem a lista propria (MESSAGES_UPSERT) e nao muda.
+      WEBHOOK_EVENTS_MESSAGES_UPSERT: "true"
+      WEBHOOK_EVENTS_SEND_MESSAGE: "true"
     ports:
       - "${BIND_ADDR:-0.0.0.0}:${EVOLUTION_PORT:-8080}:8080"
     volumes:
@@ -117,10 +129,44 @@ services:
     networks:
       - auuii-net
 
+  # ----------------------------------------------------
+  # Ponte — leva as conversas pro painel (aba Atendimento)
+  # e traz as mensagens que o operador manda de la.
+  # Sem porta publicada: so a Evolution fala com ela, pela
+  # rede interna. Ela e quem liga pra fora (Auuii-Backend),
+  # entao o PC continua sem porta aberta pra internet.
+  # Se ela cair, a IA segue atendendo; o painel so atrasa
+  # (a fila fica em disco e entrega quando voltar).
+  # Liga com COMPOSE_PROFILES=ponte no .env.
+  # ----------------------------------------------------
+  ponte:
+    build: ./ponte
+    image: auuii-ponte:local
+    container_name: auuii-ponte
+    profiles: ["ponte"]
+    restart: unless-stopped
+    depends_on:
+      - evolution
+    environment:
+      BACKEND_URL: ${AUUII_API_URL:-https://ifood.onrender.com}
+      PONTE_API_KEY: ${PONTE_API_KEY:-}
+      PONTE_WEBHOOK_SECRET: ${PONTE_WEBHOOK_SECRET:-}
+      EVOLUTION_API_URL: http://evolution:8080
+      EVOLUTION_API_KEY: ${AUTHENTICATION_API_KEY}
+      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-auuii}
+      SUPORTE_WHATSAPP: ${SUPORTE_WHATSAPP:-}
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - ponte_dados:/data
+    mem_limit: 128m
+    networks:
+      - auuii-net
+
 volumes:
   n8n_data:
   evolution_instances:
   evolution_db:
+  ponte_dados:
 
 networks:
   auuii-net:
