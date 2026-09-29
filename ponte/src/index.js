@@ -53,6 +53,8 @@ if (cfg.segredo.length < 16) {
 
 const classificador = new Classificador({ suporteWhatsapp: cfg.suporte });
 const desde = Date.now();
+// Espera antes de tentar de novo quando o backend RECUSA a conexão (configurável pra teste).
+const ESPERA_RECUSA_MS = Number(process.env.PONTE_ESPERA_RECUSA_MS || 60000);
 let ultimaMensagemEm = null;
 
 // ─── Fila em disco ─────────────────────────────────────────────────────────────────
@@ -120,13 +122,28 @@ socket.on('connect', () => {
     enviarEstado();
     drenar();
 });
-socket.on('disconnect', (motivo) => log(`🔌 desconectada: ${motivo}`));
+// O socket.io-client só reconecta sozinho quando a conexão CAIU. Quando o servidor
+// RECUSA (chave errada, ou a chave ainda não foi posta no Render) ou derruba a conexão de
+// propósito, ele desiste e fica parado pra sempre — e a ponte parecia de pé, só que surda.
+// Aqui ela volta a tentar sozinha, devagar: recusa não se resolve em segundos.
+let tentativaManual = null;
+function tentarDeNovo(ms, motivo) {
+    if (tentativaManual || socket.connected) return;
+    log(`🔌 nova tentativa em ${Math.round(ms / 1000)} s (${motivo})`);
+    tentativaManual = setTimeout(() => { tentativaManual = null; socket.connect(); }, ms);
+}
+
+socket.on('disconnect', (motivo) => {
+    log(`🔌 desconectada: ${motivo}`);
+    if (motivo === 'io server disconnect') tentarDeNovo(Math.min(30000, ESPERA_RECUSA_MS), 'o backend encerrou a conexão');
+});
 socket.on('connect_error', (err) => {
     if (err?.data?.code === 'PONTE_CHAVE_INVALIDA') {
         log('❌ o backend recusou a chave: PONTE_API_KEY daqui é diferente da do Render.');
     } else {
         log(`🔌 sem conexão com o backend: ${err.message}`);
     }
+    if (!socket.active) tentarDeNovo(ESPERA_RECUSA_MS, 'conexão recusada');
 });
 socket.on('enviar', (pedido) => { atenderEnvio(pedido); });
 
