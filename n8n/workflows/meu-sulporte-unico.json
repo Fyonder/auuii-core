@@ -1390,7 +1390,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ number: $('Normaliza').first().json.chatId, presence: 'composing', delay: 8000 }) }}",
+        "jsonBody": "={{ JSON.stringify({ number: $('Normaliza').first().json.chatId, presence: 'composing', delay: 1000 }) }}",
         "options": {}
       },
       "name": "Mostrar digitando",
@@ -1404,6 +1404,179 @@
       "id": "9807590b-293f-4c96-87ce-60d002c432d5",
       "onError": "continueRegularOutput",
       "notes": "composing por 8s"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "h1",
+              "leftValue": "={{ $json.body?.data?.key?.fromMe === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "h2",
+              "leftValue": "={{ $json.body?.data?.message?.conversation ?? $json.body?.data?.message?.extendedTextMessage?.text ?? '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "h3",
+              "leftValue": "={{ !/@(g\\.us|newsletter|broadcast)$/.test($json.body?.data?.key?.remoteJid || '') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "Humano pelo aparelho?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -5664,
+        -884
+      ],
+      "notesInFlow": true,
+      "id": "467a5ecc-8d7e-49c6-994c-1250d3bd944b",
+      "notes": "fromMe, vazio, grupo, canal"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Alguem digitou pelo aparelho do Auuii. Nao e o bot: as respostas do bot saem\n// pela API da Evolution e nao voltam como messages.upsert. Pausa a IA nessa\n// conversa e renova a pausa a cada mensagem humana.\nconst PAUSA_MIN = 20;\nconst d = $input.first().json.body?.data ?? {};\nconst chatId = (d.key?.remoteJid ?? '').split('@')[0];\nconst s = $getWorkflowStaticData('global');\ns.pausas = s.pausas || {};\nconst agora = Date.now();\nfor (const [k, ate] of Object.entries(s.pausas)) if (ate < agora) delete s.pausas[k];\ns.pausas[chatId] = agora + PAUSA_MIN * 60 * 1000;\nreturn [{ json: { pausada: true, motivo: 'humano digitou pelo aparelho do Auuii', chatId, ate: new Date(s.pausas[chatId]).toISOString() } }];"
+      },
+      "id": "caa510aa-8ab2-4025-bafe-c992ddf08f8a",
+      "name": "Pausa por humano",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5404,
+        -984
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Le a pausa desta conversa (so leitura: nao grava nada).\nconst s = $getWorkflowStaticData('global');\nconst item = $input.first().json;\nconst ate = (s.pausas || {})[item.chatId] || 0;\nreturn [{ json: { ...item, pausada: ate > Date.now(), pausadaAte: ate ? new Date(ate).toISOString() : null } }];"
+      },
+      "id": "8f0fdeea-181e-4ba0-aed6-c946831b900f",
+      "name": "Checa pausa",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5212,
+        -464
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "p1",
+              "leftValue": "={{ $json.pausada === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "IA pausada?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -4952,
+        -464
+      ],
+      "notesInFlow": true,
+      "id": "6e057aeb-422f-4d49-9724-1e282586e52d",
+      "notes": "teste nao marca visto nem digita"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "pz1",
+              "name": "ignorado",
+              "type": "boolean",
+              "value": "={{ true }}"
+            },
+            {
+              "id": "pz2",
+              "name": "motivo",
+              "type": "string",
+              "value": "=IA pausada: humano atendendo ate {{ $json.pausadaAte }}"
+            },
+            {
+              "id": "pz3",
+              "name": "chatId",
+              "type": "string",
+              "value": "={{ $json.chatId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Pausada (humano atendendo)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -4692,
+        -704
+      ],
+      "notesInFlow": true,
+      "id": "3444f31f-04d0-4d0a-b3fa-3120240b0ac6",
+      "notes": "responde 200 e para"
+    },
+    {
+      "parameters": {
+        "jsCode": "// A IA acabou de chamar o suporte: pausa a IA nessa conversa para o humano\n// assumir sem a IA responder junto. Nao pausa o proprio numero do suporte.\nconst PAUSA_MIN = 20;\nconst m = $('Canal e WhatsApp?').first().json;\nconst suporte = ($env.SUPORTE_WHATSAPP || '').replace(/\\D/g, '');\nif (!m.chatId || m.chatId === suporte) {\n  return [{ json: { pausada: false, motivo: 'conversa do proprio suporte', chatId: m.chatId } }];\n}\nconst s = $getWorkflowStaticData('global');\ns.pausas = s.pausas || {};\nconst agora = Date.now();\nfor (const [k, ate] of Object.entries(s.pausas)) if (ate < agora) delete s.pausas[k];\ns.pausas[m.chatId] = agora + PAUSA_MIN * 60 * 1000;\nreturn [{ json: { pausada: true, motivo: 'handoff para o suporte', chatId: m.chatId, ate: new Date(s.pausas[m.chatId]).toISOString() } }];"
+      },
+      "id": "8727862d-1270-4111-9750-3faf5afa60d8",
+      "name": "Pausa IA (handoff)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2576,
+        -576
+      ],
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -1411,7 +1584,7 @@
       "main": [
         [
           {
-            "node": "E eco?",
+            "node": "Humano pelo aparelho?",
             "type": "main",
             "index": 0
           }
@@ -1440,7 +1613,7 @@
       "main": [
         [
           {
-            "node": "Veio do WhatsApp?",
+            "node": "Checa pausa",
             "type": "main",
             "index": 0
           }
@@ -1817,7 +1990,7 @@
       "main": [
         [
           {
-            "node": "Fim",
+            "node": "Pausa IA (handoff)",
             "type": "main",
             "index": 0
           }
@@ -1858,6 +2031,64 @@
         [
           {
             "node": "Identificar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Humano pelo aparelho?": {
+      "main": [
+        [
+          {
+            "node": "Pausa por humano",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "E eco?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Checa pausa": {
+      "main": [
+        [
+          {
+            "node": "IA pausada?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IA pausada?": {
+      "main": [
+        [
+          {
+            "node": "Pausada (humano atendendo)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Veio do WhatsApp?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pausa IA (handoff)": {
+      "main": [
+        [
+          {
+            "node": "Fim",
             "type": "main",
             "index": 0
           }
