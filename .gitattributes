@@ -1,0 +1,5 @@
+# Scripts e a ponte rodam no Linux (PC de casa). Clonar no Windows com autocrlf
+# transformaria em CRLF e quebraria o shell e o Dockerfile.
+*.sh text eol=lf
+ponte/** text eol=lf
+Caddyfile text eol=lf
