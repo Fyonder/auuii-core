@@ -42,11 +42,11 @@
             },
             {
               "id": "e2",
-              "leftValue": "={{ $json.body?.data?.message?.conversation ?? $json.body?.data?.message?.extendedTextMessage?.text ?? $json.body?.data?.message?.imageMessage?.caption ?? $json.body?.data?.message?.videoMessage?.caption ?? $json.body?.message }}",
+              "leftValue": "={{ String(($json.body?.data?.message?.conversation ?? $json.body?.data?.message?.extendedTextMessage?.text ?? $json.body?.data?.message?.imageMessage?.caption ?? $json.body?.data?.message?.videoMessage?.caption ?? $json.body?.message) ?? '').trim() === '' && !(/(audio|image|sticker|video|document|location|contact)Message/i.test(Object.keys($json.body?.data?.message || {}).join(',')) || !!$json.body?.midia) }}",
               "rightValue": "",
               "operator": {
-                "type": "string",
-                "operation": "empty",
+                "type": "boolean",
+                "operation": "true",
                 "singleValue": true
               }
             },
@@ -147,6 +147,12 @@
               "name": "instancia",
               "type": "string",
               "value": "={{ $json.body?.instance ?? $env.EVOLUTION_INSTANCE }}"
+            },
+            {
+              "id": "s5",
+              "name": "midia",
+              "type": "string",
+              "value": "={{ (() => { const k = Object.keys($json.body?.data?.message || {}).join(','); if (/audioMessage/i.test(k)) return 'audio'; if (/stickerMessage/i.test(k)) return 'figurinha'; if (/imageMessage/i.test(k)) return 'imagem'; if (/videoMessage/i.test(k)) return 'video'; if (/documentMessage/i.test(k)) return 'documento'; if (/locationMessage/i.test(k)) return 'localizacao'; if (/contactMessage|contactsArrayMessage/i.test(k)) return 'contato'; return $json.body?.midia || ''; })() }}"
             }
           ]
         },
@@ -2206,6 +2212,99 @@
         -4472,
         -124
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6f052dc2-829e-450f-bdef-dcc8e7fc8f1a",
+              "leftValue": "={{ !!$('Normaliza').first().json.midia && !String($('Normaliza').first().json.message || '').trim() }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "dbaf1f08-318e-47c4-847a-2d938340058b",
+      "name": "So midia?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2988,
+        52
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "s0",
+              "name": "perfil",
+              "type": "string",
+              "value": "={{ $('Identificar').first().json.perfil || 'desconhecido' }}"
+            },
+            {
+              "id": "s1",
+              "name": "chatId",
+              "type": "string",
+              "value": "={{ $('Normaliza').first().json.chatId }}"
+            },
+            {
+              "id": "s2",
+              "name": "canal",
+              "type": "string",
+              "value": "={{ $('Normaliza').first().json.canal }}"
+            },
+            {
+              "id": "s3",
+              "name": "instancia",
+              "type": "string",
+              "value": "={{ $('Normaliza').first().json.instancia }}"
+            },
+            {
+              "id": "s4",
+              "name": "pergunta",
+              "type": "string",
+              "value": "={{ '[' + $('Normaliza').first().json.midia + ']' }}"
+            },
+            {
+              "id": "s5",
+              "name": "reply",
+              "type": "string",
+              "value": "={{ ({ audio: 'Não consigo ouvir áudio. Pode me escrever o que precisa?', imagem: 'Não consigo ver imagem. Pode me explicar por texto?', figurinha: 'Não entendi a figurinha 😅 Pode me escrever o que precisa?', video: 'Não consigo ver vídeo. Pode me explicar por texto?', documento: 'Não consigo abrir arquivo. Pode me explicar por texto?', localizacao: 'Recebi a localização, mas não consigo usar. Pode me escrever o endereço ou o que precisa?', contato: 'Não consigo abrir contato. Pode me escrever o que precisa?' })[$('Normaliza').first().json.midia] || 'Não entendi essa mensagem. Pode me escrever o que precisa?' }}"
+            },
+            {
+              "id": "s6",
+              "name": "handoff",
+              "type": "boolean",
+              "value": "={{ false }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "16241f83-c752-4bae-a6ad-54c1e6224ad9",
+      "name": "Pede texto",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2768,
+        52
+      ]
     }
   ],
   "connections": {
@@ -2695,7 +2794,7 @@
         ],
         [
           {
-            "node": "Veio do WhatsApp?",
+            "node": "So midia?",
             "type": "main",
             "index": 0
           }
@@ -2931,6 +3030,35 @@
         [
           {
             "node": "Decisao (teste)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "So midia?": {
+      "main": [
+        [
+          {
+            "node": "Pede texto",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Veio do WhatsApp?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pede texto": {
+      "main": [
+        [
+          {
+            "node": "Canal e WhatsApp?",
             "type": "main",
             "index": 0
           }
