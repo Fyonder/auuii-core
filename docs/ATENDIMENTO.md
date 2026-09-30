@@ -38,6 +38,27 @@ WhatsApp ⇄ Evolution (este PC)
 A pausa automática nunca encurta uma pausa maior nem desfaz a "até retomar".
 "Retomar Duda" limpa tudo.
 
+## Duda tira o pedido do motoboy
+
+O motoboy diz que não vai conseguir fazer a corrida. A Duda pergunta o motivo e chama a tool
+"Retirar pedido" (`POST /api/suporte/motoboy/retirada`). Só vale **antes da coleta**: com o
+pedido coletado, ela chama um humano.
+
+| Situação do motivo | O que acontece |
+|---|---|
+| Ainda sem autonomia | Fica pendente 15 min. Cartão na conversa + faixa no painel + aviso no WhatsApp do suporte com um código |
+| O suporte aprova | Painel ("Aprovar e buscar outro", exige `orders.write`) ou `SIM AB12` no WhatsApp: o pedido sai da tela do motoboy e entra na busca de outro entregador (que não chama o mesmo motoboy) |
+| O suporte nega | `NAO AB12` ou "Negar": o pedido fica com ele, a Duda avisa e um atendente assume |
+| Ninguém responde em 15 min | Vira atendimento humano; não conta como negada |
+| Motivo com autonomia | 5 aprovações seguidas do mesmo motivo liberam; a Duda retira sozinha e só avisa o suporte. Uma negada zera |
+
+"Acidente" e "Outro motivo" nunca ganham autonomia. No painel, **Atendimento → Retiradas**
+mostra o progresso de cada motivo, desliga um motivo ou desliga tudo.
+
+`SIM/NAO <código>` só vale vindo do número em `SUPORTE_WHATSAPP`, e precisa estar **no
+Render também** (o backend confere). Sem ela, a decisão pelo WhatsApp responde "não
+configurado" e o painel continua funcionando.
+
 ## Ligar
 
 No `.env` deste PC:
