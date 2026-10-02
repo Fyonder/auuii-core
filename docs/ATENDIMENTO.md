@@ -59,6 +59,25 @@ mostra o progresso de cada motivo, desliga um motivo ou desliga tudo.
 Render também** (o backend confere). Sem ela, a decisão pelo WhatsApp responde "não
 configurado" e o painel continua funcionando.
 
+## Dois números: Auuii (Duda) e Goby (Nina)
+
+Cada instância da Evolution é uma empresa, com IA, conhecimento e conversas próprios.
+
+| | Auuii | Goby |
+|---|---|---|
+| Instância da Evolution | `auuii` | `goby` |
+| Fluxo no n8n | Meu Sulporte (`/webhook/auuii`) | Atendimento Goby (Nina) (`/webhook/goby`) |
+| IA | Duda | Nina |
+| Quem ela reconhece | motoboy, loja, cliente (Firestore) | entregador da Goby (Postgres do PickNGo, só leitura) |
+| O que consulta | semana, fila, corrida, pedido, retirada | corridas em aberto do entregador |
+| Conhecimento | `settings/whatsappIA` | `settings/whatsappIA_goby` |
+
+A ponte manda a instância em cada evento; o backend separa as conversas por ela (a mesma
+pessoa falando com os dois números são duas conversas) e responde pelo número certo. No
+painel: filtro **Todas / Auuii / Goby** e "O que a IA sabe" com uma aba por empresa.
+
+A cota da Groq (8 mil tokens/min por modelo) é a MESMA para as duas IAs.
+
 ## Ligar
 
 No `.env` deste PC:

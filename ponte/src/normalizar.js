@@ -115,9 +115,9 @@ class Classificador {
         this.idsDeEnvio = new Map();  // id → quando viu (pra reconhecer eco)
     }
 
-    registrarPendente({ reqId, conversaId, numero, texto }) {
+    registrarPendente({ reqId, conversaId, numero, texto, instancia = null }) {
         this._limpar();
-        this.pendentes.push({ reqId, conversaId, chave: chaveCanonica(numero), texto: String(texto || '').trim(), em: this.agora() });
+        this.pendentes.push({ reqId, conversaId, instancia, chave: chaveCanonica(numero), texto: String(texto || '').trim(), em: this.agora() });
     }
 
     esquecerPendente(reqId) {
@@ -152,6 +152,9 @@ class Classificador {
 
         const base = {
             id: data.key.id,
+            // Qual número (empresa) recebeu ou mandou: auuii, goby... O webhook global da
+            // Evolution manda TODAS as instâncias pra cá; o backend separa as conversas por isto.
+            instancia: body.instance || null,
             jid: destino.jid,
             telefone: destino.telefone,
             lid: destino.lid,
@@ -166,7 +169,10 @@ class Classificador {
             this.marcarIdDeEnvio(data.key.id);
             const chave = chaveCanonica(destino.telefone || destino.jid);
             const texto = conteudo.texto.trim();
-            const i = this.pendentes.findIndex((p) => p.texto === texto && p.chave === chave);
+            // Mesma instância também: o painel pode estar mandando o mesmo "ok" pro mesmo
+            // contato pelos dois números ao mesmo tempo.
+            const i = this.pendentes.findIndex((p) => p.texto === texto && p.chave === chave
+                && (!p.instancia || !base.instancia || p.instancia === base.instancia));
             if (i >= 0) {
                 const [p] = this.pendentes.splice(i, 1);
                 return { ...base, autor: 'operador', reqId: p.reqId, conversaId: p.conversaId };

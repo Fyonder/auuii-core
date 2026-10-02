@@ -93,3 +93,19 @@ test('timestamp em segundos, em milissegundos ou no formato Long do protobuf', (
     assert.equal(emMs(1790000000000), 1790000000000);
     assert.equal(emMs({ low: 1790000000, high: 0 }), 1790000000000);
 });
+
+test('cada evento diz de qual número (instância) veio', () => {
+    const c = new Classificador({ suporteWhatsapp: SUPORTE });
+    assert.equal(c.classificar(upsert(msg())).instancia, 'auuii');
+    assert.equal(c.classificar({ event: 'messages.upsert', instance: 'goby', data: msg({ id: 'G1' }) }).instancia, 'goby');
+});
+
+test('envio do painel pela Goby não é confundido com o mesmo texto saindo pela Auuii', () => {
+    const c = new Classificador({ suporteWhatsapp: SUPORTE });
+    c.registrarPendente({ reqId: 'req_g', conversaId: 'c_g', numero: '554499429771', texto: 'ok', instancia: 'goby' });
+    // a Duda (Auuii) manda "ok" pro mesmo contato: é da IA, não o envio do painel da Goby
+    assert.equal(c.classificar(enviada(msg({ id: 'A1', fromMe: true, texto: 'ok' }))).autor, 'ia');
+    const ev = c.classificar({ event: 'send.message', instance: 'goby', data: msg({ id: 'G2', fromMe: true, texto: 'ok' }) });
+    assert.equal(ev.autor, 'operador');
+    assert.equal(ev.reqId, 'req_g');
+});

@@ -217,12 +217,14 @@ function motivoDaEvolution(corpo, status) {
 async function atenderEnvio(pedido) {
     const { reqId, conversaId, numero, texto } = pedido || {};
     if (!reqId || !numero || !texto || jaAtendido(reqId)) return;
+    // Cada conversa responde pelo número dela (auuii, goby...). Sem instância, a padrão.
+    const instancia = /^[A-Za-z0-9_-]{1,40}$/.test(pedido.instancia || '') ? pedido.instancia : cfg.instancia;
 
     // ANTES do sendText: o SEND_MESSAGE da Evolution chega enquanto a chamada ainda
     // não voltou, e é por este pendente que ele é reconhecido como do operador.
-    classificador.registrarPendente({ reqId, conversaId, numero, texto });
+    classificador.registrarPendente({ reqId, conversaId, numero, texto, instancia });
     try {
-        const resp = await fetch(`${cfg.evolutionUrl}/message/sendText/${encodeURIComponent(cfg.instancia)}`, {
+        const resp = await fetch(`${cfg.evolutionUrl}/message/sendText/${encodeURIComponent(instancia)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', apikey: cfg.evolutionKey },
             body: JSON.stringify({ number: String(numero).split('@')[0].replace(/\D/g, ''), text: texto }),
