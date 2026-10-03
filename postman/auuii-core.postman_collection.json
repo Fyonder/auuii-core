@@ -45,6 +45,36 @@
       "key": "telDesconhecido",
       "value": "5500999000001",
       "type": "string"
+    },
+    {
+      "key": "suporteKeyGoby",
+      "value": "",
+      "type": "string",
+      "description": "SUPORTE_API_KEY_GOBY do Render (chave fixa da Nina). Vazia de proposito: e producao."
+    },
+    {
+      "key": "telGoby",
+      "value": "",
+      "type": "string",
+      "description": "Telefone de um entregador da Goby, so digitos com DDI+DDD"
+    },
+    {
+      "key": "telNovo",
+      "value": "",
+      "type": "string",
+      "description": "Telefone que NAO esta no cadastro da Goby (pra testar o vinculo pelo nome)"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string",
+      "description": "idToken do Firebase de um admin do goby-suporte (localStorage goby_id_token)"
+    },
+    {
+      "key": "conversaId",
+      "value": "",
+      "type": "string",
+      "description": "id de uma conversa (c_...) da aba Atendimento"
     }
   ],
   "item": [
@@ -1091,6 +1121,401 @@
             },
             "description": "Confere que o backend está fechado sem a chave."
           }
+        }
+      ]
+    },
+    {
+      "name": "3. Nina (Goby) - triagem dos motoboys",
+      "description": "Chave da Goby (SUPORTE_API_KEY_GOBY): so le dados da Goby; rotas da Auuii respondem 403. Ver docs/ATENDIMENTO.md.",
+      "item": [
+        {
+          "name": "Identificar (Goby) - corridas, pendentes, retirada",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKeyGoby}}"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/identificar?telefone={{telGoby}}&msgId=TESTE123",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "identificar"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{telGoby}}"
+                },
+                {
+                  "key": "msgId",
+                  "value": "TESTE123"
+                }
+              ]
+            },
+            "description": "Com a chave da Goby a instancia e sempre goby. Devolve perfil, corridas (em aberto), pendentes (mensagens dele sem resposta; msgId = a atual), aguardandoHumano, retiradaPelaIA, conhecimento, ia."
+          }
+        },
+        {
+          "name": "Vincular pelo nome (numero fora do cadastro)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKeyGoby}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/goby/motoboy/vincular?telefone={{telNovo}}",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "goby",
+                "motoboy",
+                "vincular"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{telNovo}}"
+                }
+              ]
+            },
+            "description": "Sempre 200. vinculado true + entregador + corridas, ou motivo: nome_incompleto | ambiguo | nao_encontrado | bloqueado (3 falhas/24h) | ja_identificado (telefone que ja e de alguem).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Nome Sobrenome do entregador\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Corridas em aberto",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKeyGoby}}"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/goby/motoboy/corrida?telefone={{telGoby}}",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "goby",
+                "motoboy",
+                "corrida"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{telGoby}}"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Retirar pedido da tela (so com o interruptor ligado)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKeyGoby}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/goby/motoboy/retirada?telefone={{telGoby}}",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "goby",
+                "motoboy",
+                "retirada"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{telGoby}}"
+                }
+              ]
+            },
+            "description": "Sempre 200. Desligado → permitido:false motivo:desligado. Ligado → feito:true, ou motivo: ja_coletada | encerrada | de_outro_entregador | nao_encontrado | codigo_invalido | banco_indisponivel | nao_alterou.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"1234\",\n  \"motivo\": \"moto quebrou\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Rota da Auuii com a chave da Goby (deve dar 403)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKeyGoby}}"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/motoboy/semana?telefone={{telGoby}}",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "motoboy",
+                "semana"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{telGoby}}"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Painel (Bearer do admin)",
+          "item": [
+            {
+              "name": "Config da Nina - ler",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{apiUrl}}/api/admin/whatsapp/config?instancia=goby",
+                  "host": [
+                    "{{apiUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "whatsapp",
+                    "config"
+                  ],
+                  "query": [
+                    {
+                      "key": "instancia",
+                      "value": "goby"
+                    }
+                  ]
+                },
+                "description": "retiradaPelaIA + banco {configurado, host, usuario, testadoEm, testadoPor}. Nunca a senha."
+              }
+            },
+            {
+              "name": "Config da Nina - ligar/desligar a retirada",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{apiUrl}}/api/admin/whatsapp/config?instancia=goby",
+                  "host": [
+                    "{{apiUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "whatsapp",
+                    "config"
+                  ],
+                  "query": [
+                    {
+                      "key": "instancia",
+                      "value": "goby"
+                    }
+                  ]
+                },
+                "description": "Ligar sem a senha do banco testada → 409.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"retiradaPelaIA\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Banco da Goby - testar a senha e guardar (so admin)",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{apiUrl}}/api/admin/whatsapp/config/banco/testar",
+                  "host": [
+                    "{{apiUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "whatsapp",
+                    "config",
+                    "banco",
+                    "testar"
+                  ]
+                },
+                "description": "Conecta, confere has_table_privilege(pedidos, UPDATE) e guarda cifrada. host/porta/usuario vazios = padrao (db.<ref>.supabase.co:5432, postgres). Se o host direto nao responder (IPv6), use o pooler aws-0-<regiao>.pooler.supabase.com com usuario postgres.<ref>.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"senha\": \"<Database password do Supabase - NAO salvar na colecao>\",\n  \"host\": \"\",\n  \"porta\": \"\",\n  \"usuario\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Banco da Goby - remover a senha (desliga a retirada)",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{apiUrl}}/api/admin/whatsapp/config/banco",
+                  "host": [
+                    "{{apiUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "whatsapp",
+                    "config",
+                    "banco"
+                  ]
+                },
+                "description": ""
+              }
+            },
+            {
+              "name": "Desfazer \"identificado pelo nome\"",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{apiUrl}}/api/admin/whatsapp/vinculos/{{conversaId}}",
+                  "host": [
+                    "{{apiUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "whatsapp",
+                    "vinculos",
+                    "{{conversaId}}"
+                  ]
+                },
+                "description": ""
+              }
+            }
+          ]
         }
       ]
     }
