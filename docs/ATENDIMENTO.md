@@ -69,7 +69,8 @@ Cada instância da Evolution é uma empresa, com IA, conhecimento e conversas pr
 | Fluxo no n8n | Meu Sulporte (`/webhook/auuii`) | Atendimento Goby (Nina) (`/webhook/goby`) |
 | IA | Duda | Nina |
 | Quem ela reconhece | motoboy, loja, cliente (Firestore) | entregador da Goby (Postgres do PickNGo, só leitura) |
-| O que consulta | semana, fila, corrida, pedido, retirada | corridas em aberto do entregador |
+| O que consulta | semana, fila, corrida, pedido, retirada | cadastro, corridas em aberto, dia, semana, uma corrida dele pelo número; identifica pelo nome; retira pedido (se ligado) |
+| Chave no backend | `AUUII_API_TOKEN` = `SUPORTE_API_KEY` | `AUUII_API_TOKEN_GOBY` = `SUPORTE_API_KEY_GOBY` (só dados da Goby) |
 | Conhecimento | `settings/whatsappIA` | `settings/whatsappIA_goby` |
 
 A ponte manda a instância em cada evento; o backend separa as conversas por ela (a mesma
@@ -77,6 +78,70 @@ pessoa falando com os dois números são duas conversas) e responde pelo número
 painel: filtro **Todas / Auuii / Goby** e "O que a IA sabe" com uma aba por empresa.
 
 A cota da Groq (8 mil tokens/min por modelo) é a MESMA para as duas IAs.
+
+### O que a Nina consulta (só leitura, só do entregador que está falando)
+
+| Ferramenta no n8n | Rota | Parâmetro |
+|---|---|---|
+| Meu cadastro | `GET /api/suporte/goby/motoboy/perfil` | — |
+| Minhas corridas | `GET /api/suporte/goby/motoboy/corrida` | — |
+| Meu dia | `GET /api/suporte/goby/motoboy/dia` | `dia`: vazio, `ontem` ou `AAAA-MM-DD` |
+| Minha semana | `GET /api/suporte/goby/motoboy/semana` | `semana`: vazio, `passada` ou uma data |
+| Buscar corrida | `GET /api/suporte/goby/motoboy/pedido` | `codigo`: só o número |
+
+| Me identificar | `POST /api/suporte/goby/motoboy/vincular` | body `nome` (nome e sobrenome) |
+| Retirar pedido | `POST /api/suporte/goby/motoboy/retirada` | body `codigo`, `motivo` |
+
+Todas levam `?telefone=` (o chatId) e o header `x-suporte-api-key`. Com a chave da Goby o
+backend força `instancia=goby` em identificar, pausa e handoff e responde **403** em
+qualquer rota da Auuii: a Nina nunca lê dado da Auuii, mesmo que a IA erre o parâmetro.
+"Ganhos" é a soma das taxas das corridas entregues, não extrato: o acerto é com a Goby.
+
+### Nina: triagem dos motoboys (03/10/2026)
+
+O `identificar` da Goby devolve, além de quem é e da pausa, o que a Nina precisa pra fazer a
+triagem numa chamada só (o nó **Monta contexto** transforma em texto pro prompt):
+
+| Campo | O que é | O que a Nina faz |
+|---|---|---|
+| `corridas` | pedidos em aberto com ele (código, loja, etapa; até 5) | Na primeira mensagem, cumprimento ou pedido vago, lista os números e pergunta com qual precisa de ajuda |
+| `pendentes` | mensagens dele das últimas 24 h que **ninguém** respondeu (até 3; o n8n manda `&msgId=` da atual pra ela não contar) | Responde cada uma em uma frase, junto com a atual |
+| `aguardandoHumano` | já foi escalado e ninguém respondeu | Diz que a equipe já foi avisada, sem chamar de novo |
+| `retiradaPelaIA` | o interruptor do painel | Ver abaixo |
+
+**Pendentes** só valem com a ponte conectada (sem ela, nada do que a IA/equipe respondeu
+chega ao backend e tudo pareceria sem resposta); mensagens de menos de 90 s não contam (é a
+rajada que outra execução ainda está respondendo); envio do painel que falhou não conta como
+resposta; mídia sem texto e nota interna são puladas.
+
+**Número que não está no cadastro.** Se a pessoa diz que é entregador, a Nina pede nome e
+sobrenome e chama "Me identificar". O backend casa com um cadastro **ativo** cujo primeiro
+nome é igual e cujas outras palavras estão no nome (sem acento, sem de/da/do); o vínculo fica
+em `goby_vinculos/{telefone}` por 30 dias e todas as ferramentas passam a funcionar pra ele.
+Travas: 3 falhas em 24 h bloqueiam (`goby_vinculos_tentativas`), telefone que já é de alguém
+nunca troca de dono, `ambiguo` não cita nomes. No painel a conversa ganha o selo
+**identificado pelo nome** e o botão **Desfazer** (`whatsapp.config`), que apaga o vínculo.
+Decisão do dono, ciente de que quem souber o nome de um entregador veria as corridas dele.
+
+**Tirar pedido da tela** — botão **Configurações** na aba Atendimento:
+
+| Interruptor | O que a Nina faz quando ele quer largar/tirar um pedido |
+|---|---|
+| Desligado (padrão) | **Triagem**: pergunta qual pedido (se há mais de um) e o que aconteceu, termina com `[SUPORTE]` e uma última linha `RESUMO: pedido N · motivo`. O resumo vira o motivo do handoff no painel e vai no aviso ao `SUPORTE_WHATSAPP` |
+| Ligado | Chama "Retirar pedido": o backend zera `entregador_id`, `data_aceito`, `data_visualizado` e `data_despachado` em `pedidos` no Postgres da Goby — só se o pedido é dele e ainda não foi coletado. Nota na conversa + alerta no painel |
+
+Ligar exige a **senha do Postgres do Supabase** (Database password do projeto), digitada no
+painel pelo administrador: o backend conecta, confere `has_table_privilege(..., 'pedidos',
+'UPDATE')` e, se der certo, guarda cifrada em `segredos/goby_db` (AES-256-GCM, chave
+`OD_SECRET_KEY` do Render — a mesma do Open Delivery). A senha nunca volta pro painel nem
+pro log. O host direto `db.<ref>.supabase.co` é só IPv6: se o Render não alcançar, o
+formulário aceita o pooler (`aws-0-<regiao>.pooler.supabase.com`, usuário
+`postgres.<ref>`) e a mensagem de erro diz isso.
+
+> **Aviso.** A tabela `pedidos` do Supabase é uma cópia feita por ETL a partir do PickNGo a
+> cada ~2 min. Enquanto o motoboy usar o app do PickNGo, a retirada feita aqui **não aparece
+> pra ele** e pode ser desfeita no próximo ciclo. O interruptor existe pra quando a Goby
+> estiver no auuii-motoboy (decisão do dono, 03/10/2026). Por isso ele nasce desligado.
 
 ## Ligar
 

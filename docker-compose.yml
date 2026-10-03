@@ -58,6 +58,8 @@ services:
       #   {{ $env.AUUII_API_URL }}  e  {{ $env.AUUII_API_TOKEN }}
       AUUII_API_URL: ${AUUII_API_URL:-}
       AUUII_API_TOKEN: ${AUUII_API_TOKEN:-}
+      # Chave fixa da Nina (Goby) — mesmo valor de SUPORTE_API_KEY_GOBY no Render.
+      AUUII_API_TOKEN_GOBY: ${AUUII_API_TOKEN_GOBY:-}
       # instancia do WhatsApp e numero do suporte humano (handoff)
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-auuii}
       SUPORTE_WHATSAPP: ${SUPORTE_WHATSAPP:-}
