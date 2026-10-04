@@ -155,6 +155,14 @@ baixo. Se a pessoa já disse o que precisa, a Nina cumprimenta em poucas palavra
 Depois do primeiro contato ela não cumprimenta de novo. Com a ponte fora, `primeiroContato`
 vem nulo e a Nina não força a saudação.
 
+**Menu pra número desconhecido** (dono, 04/10/2026). Quem o robô e o backend não conhecem
+recebe, a qualquer mensagem: "Pra eu te ajudar, me diz quem é você: 1 - Motoboy,
+2 - Restaurante". "1" → "Me manda seu nome completo"; "2" → "Me manda o CNPJ da loja". A
+mensagem seguinte vai pra IA com a instrução de identificar (nome ou CNPJ). O assunto da
+primeira mensagem fica guardado e é resolvido depois. A etapa de cada telefone fica nos
+dados estáticos do fluxo (`menuNina`) por 30 min. Quem responde outra coisa ao menu (ex.:
+cliente) é atendido pela IA. Tudo isso sai sem IA, menos a identificação.
+
 **Quem é.** Quando o que a pessoa precisa envolve pedido, corrida, cadastro ou pagamento, a
 Nina pergunta se é entregador ou restaurante e identifica. O que ela precisa fica guardado:
 depois de identificar, a Nina resolve isso, sem recomeçar. No n8n, o
