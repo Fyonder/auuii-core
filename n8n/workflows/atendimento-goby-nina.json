@@ -183,7 +183,7 @@
           "parameters": [
             {
               "name": "x-suporte-api-key",
-              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
             }
           ]
         },
@@ -563,7 +563,7 @@
           "parameters": [
             {
               "name": "x-suporte-api-key",
-              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
             }
           ]
         },
@@ -947,7 +947,7 @@
           "parameters": [
             {
               "name": "x-suporte-api-key",
-              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
             }
           ]
         },
@@ -1070,7 +1070,7 @@
           "parameters": [
             {
               "name": "x-suporte-api-key",
-              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
             }
           ]
         },
@@ -1166,7 +1166,7 @@
           "parameters": [
             {
               "name": "x-suporte-api-key",
-              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
             },
             {
               "name": "Content-Type",
@@ -1408,7 +1408,7 @@
           "parameters": [
             {
               "name": "x-suporte-api-key",
-              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
             }
           ]
         },
@@ -1445,7 +1445,7 @@
           "parameters": [
             {
               "name": "x-suporte-api-key",
-              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
             }
           ]
         },
@@ -1482,7 +1482,7 @@
           "parameters": [
             {
               "name": "x-suporte-api-key",
-              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
             }
           ]
         },
@@ -1519,7 +1519,7 @@
           "parameters": [
             {
               "name": "x-suporte-api-key",
-              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
             }
           ]
         },
@@ -1624,7 +1624,7 @@
           "parameters": [
             {
               "name": "x-suporte-api-key",
-              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
             },
             {
               "name": "Content-Type",
@@ -1665,7 +1665,7 @@
           "parameters": [
             {
               "name": "x-suporte-api-key",
-              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
             },
             {
               "name": "Content-Type",
@@ -1706,7 +1706,7 @@
           "parameters": [
             {
               "name": "x-suporte-api-key",
-              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
             },
             {
               "name": "Content-Type",
@@ -1746,7 +1746,7 @@
           "parameters": [
             {
               "name": "x-suporte-api-key",
-              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
             }
           ]
         },
@@ -1783,7 +1783,7 @@
           "parameters": [
             {
               "name": "x-suporte-api-key",
-              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
             }
           ]
         },
@@ -1820,7 +1820,7 @@
           "parameters": [
             {
               "name": "x-suporte-api-key",
-              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
             }
           ]
         },
