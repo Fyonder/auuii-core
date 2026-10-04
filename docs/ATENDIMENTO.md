@@ -165,6 +165,24 @@ conferem no backend que quem pergunta é o `SUPORTE_WHATSAPP` (o do Render): out
 recebe 403, mesmo que a IA erre. Sem valores em R$. Se a consulta falhar, ela diz que não
 respondeu, e não "não achei".
 
+**Dia dos motoboys e vagas** (dono, 04/10/2026, "em vez de buscar 1 a 1 na lista"). Duas
+ferramentas a mais no modo suporte:
+- **Dia dos motoboys** → `GET /api/suporte/goby/suporte/dia?dia=hoje|ontem|AAAA-MM-DD&loja=`:
+  todos os entregadores do dia, um por linha, com corridas entregues/canceladas/em aberto e
+  as vagas (loja, das, até, se chegou), mais os totais (chegaram, atrasados, não chegaram).
+  `loja` deixa só quem tem vaga naquela loja. Demora uns 5-10 s (o dia inteiro da operação).
+- **Motoboy no dia** → `GET /api/suporte/goby/suporte/motoboy?entregador=&dia=`: um entregador,
+  com a lista das corridas do dia, as em aberto agora e as vagas com endereço.
+
+De onde vem (`gobyVagas.js` no backend; o espelho passou a ler `vagas_reservas`, `vagas_vagas`
+e `diarias_publico`, sem nenhuma coluna de valor): a vaga é `vagas_vagas` (horário de
+Brasília; fim antes do início = vira a meia-noite), quem pegou é `vagas_reservas`, e o "já
+chegou" é `data_chegou_estabelecimento` da diária do PickNGo, casada pela loja e pelo início
+do turno (até 90 min). Sem chegada marcada mas com corrida daquela loja no turno =
+`trabalhando`. Diária do PickNGo sem vaga no app também entra (`fonte: diaria_pickngo`, sem
+horário de fim; em 04/10 não havia vaga no app e havia 94 diárias). Se as vagas falharem, o
+resto responde e a Nina diz que as vagas não responderam.
+
 **Menu pra número desconhecido** (dono, 04/10/2026). Quem o robô e o backend não conhecem
 recebe, a qualquer mensagem: "Pra eu te ajudar, me diz quem é você: 1 - Motoboy,
 2 - Restaurante". "1" → "Me manda seu nome completo"; "2" → "Me manda o CNPJ da loja". A
