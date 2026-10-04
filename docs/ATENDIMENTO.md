@@ -118,9 +118,18 @@ chega ao backend e tudo pareceria sem resposta); mensagens de menos de 90 s não
 rajada que outra execução ainda está respondendo); envio do painel que falhou não conta como
 resposta; mídia sem texto e nota interna são puladas.
 
-**Quem é e qual o problema.** Número que a Nina não conhece recebe, na primeira resposta,
-as duas perguntas numa frase só: é entregador ou restaurante, e o que aconteceu. O problema
-fica guardado na conversa: depois de identificar, ela resolve ele, sem recomeçar. No n8n, o
+**Primeiro contato: "O que você precisa?"** O `identificar` devolve `primeiroContato`: ninguém
+(IA, painel ou celular) falou com a pessoa nas últimas 12 h. Se a mensagem é só cumprimento
+ou pedido vago ("oi", "bom dia", "preciso de ajuda"), o fluxo responde **sem IA** (IF
+**Resposta pronta?** → **Saudação**): "Oi, Carlos! Aqui é a Nina, da Goby. O que você
+precisa?", e pro entregador ou restaurante já identificado, os pedidos em aberto na linha de
+baixo. Se a pessoa já disse o que precisa, a Nina cumprimenta em poucas palavras e resolve.
+Depois do primeiro contato ela não cumprimenta de novo. Com a ponte fora, `primeiroContato`
+vem nulo e a Nina não força a saudação.
+
+**Quem é.** Quando o que a pessoa precisa envolve pedido, corrida, cadastro ou pagamento, a
+Nina pergunta se é entregador ou restaurante e identifica. O que ela precisa fica guardado:
+depois de identificar, a Nina resolve isso, sem recomeçar. No n8n, o
 IF **Entregador?** manda o entregador pro agente dele; o novo IF **Restaurante?** manda a loja
 pro **Agente Nina (loja)**; o resto fica no agente geral, que é quem identifica.
 
