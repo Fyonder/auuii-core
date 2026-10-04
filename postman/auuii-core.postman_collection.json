@@ -75,6 +75,12 @@
       "value": "",
       "type": "string",
       "description": "id de uma conversa (c_...) da aba Atendimento"
+    },
+    {
+      "key": "telLojaGoby",
+      "value": "",
+      "type": "string",
+      "description": "Telefone de quem atende num restaurante da Goby (vincula pelo CNPJ)"
     }
   ],
   "item": [
@@ -1125,7 +1131,7 @@
       ]
     },
     {
-      "name": "3. Nina (Goby) - triagem dos motoboys",
+      "name": "3. Nina (Goby) - triagem de entregadores e restaurantes",
       "description": "Chave da Goby (SUPORTE_API_KEY_GOBY): so le dados da Goby; rotas da Auuii respondem 403. Ver docs/ATENDIMENTO.md.",
       "item": [
         {
@@ -1328,6 +1334,167 @@
               ]
             },
             "description": ""
+          }
+        },
+        {
+          "name": "Restaurante - identificar pelo CNPJ",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKeyGoby}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/goby/loja/vincular?telefone={{telLojaGoby}}",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "goby",
+                "loja",
+                "vincular"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{telLojaGoby}}"
+                }
+              ]
+            },
+            "description": "Sempre 200. vinculado true + loja + pedidos em andamento, ou motivo: cnpj_invalido | nao_encontrado | ambiguo | bloqueado | ja_identificado.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cnpj\": \"00.000.000/0000-00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Restaurante - pedidos em andamento",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKeyGoby}}"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/goby/loja/pedidos?telefone={{telLojaGoby}}",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "goby",
+                "loja",
+                "pedidos"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{telLojaGoby}}"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Restaurante - um pedido pelo numero",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKeyGoby}}"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/goby/loja/pedido?telefone={{telLojaGoby}}&codigo=3020",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "goby",
+                "loja",
+                "pedido"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{telLojaGoby}}"
+                },
+                {
+                  "key": "codigo",
+                  "value": "3020"
+                }
+              ]
+            },
+            "description": "achou false + de_outra_loja quando o pedido nao e da loja."
+          }
+        },
+        {
+          "name": "Restaurante - semana",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-suporte-api-key",
+                "value": "{{suporteKeyGoby}}"
+              }
+            ],
+            "url": {
+              "raw": "{{apiUrl}}/api/suporte/goby/loja/semana?telefone={{telLojaGoby}}&semana=",
+              "host": [
+                "{{apiUrl}}"
+              ],
+              "path": [
+                "api",
+                "suporte",
+                "goby",
+                "loja",
+                "semana"
+              ],
+              "query": [
+                {
+                  "key": "telefone",
+                  "value": "{{telLojaGoby}}"
+                },
+                {
+                  "key": "semana",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "semana: vazio = atual, passada, ou AAAA-MM-DD."
           }
         },
         {

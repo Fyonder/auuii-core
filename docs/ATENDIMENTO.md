@@ -68,8 +68,8 @@ Cada instância da Evolution é uma empresa, com IA, conhecimento e conversas pr
 | Instância da Evolution | `auuii` | `goby` |
 | Fluxo no n8n | Meu Sulporte (`/webhook/auuii`) | Atendimento Goby (Nina) (`/webhook/goby`) |
 | IA | Duda | Nina |
-| Quem ela reconhece | motoboy, loja, cliente (Firestore) | entregador da Goby (Postgres do PickNGo, só leitura) |
-| O que consulta | semana, fila, corrida, pedido, retirada | cadastro, corridas em aberto, dia, semana, uma corrida dele pelo número; identifica pelo nome; retira pedido (se ligado) |
+| Quem ela reconhece | motoboy, loja, cliente (Firestore) | entregador (telefone ou nome) e restaurante (CNPJ) da Goby — Postgres do PickNGo |
+| O que consulta | semana, fila, corrida, pedido, retirada | entregador: cadastro, corridas, dia, semana, uma corrida, retirada (se ligada). Restaurante: pedidos em andamento, um pedido, semana |
 | Chave no backend | `AUUII_API_TOKEN` = `SUPORTE_API_KEY` | `AUUII_API_TOKEN_GOBY` = `SUPORTE_API_KEY_GOBY` (só dados da Goby) |
 | Conhecimento | `settings/whatsappIA` | `settings/whatsappIA_goby` |
 
@@ -91,13 +91,17 @@ A cota da Groq (8 mil tokens/min por modelo) é a MESMA para as duas IAs.
 
 | Me identificar | `POST /api/suporte/goby/motoboy/vincular` | body `nome` (nome e sobrenome) |
 | Retirar pedido | `POST /api/suporte/goby/motoboy/retirada` | body `codigo`, `motivo` |
+| Identificar restaurante | `POST /api/suporte/goby/loja/vincular` | body `cnpj` (14 números) |
+| Pedidos da loja | `GET /api/suporte/goby/loja/pedidos` | — |
+| Pedido da loja | `GET /api/suporte/goby/loja/pedido` | `codigo` |
+| Semana da loja | `GET /api/suporte/goby/loja/semana` | `semana`: vazio, `passada` ou uma data |
 
 Todas levam `?telefone=` (o chatId) e o header `x-suporte-api-key`. Com a chave da Goby o
 backend força `instancia=goby` em identificar, pausa e handoff e responde **403** em
 qualquer rota da Auuii: a Nina nunca lê dado da Auuii, mesmo que a IA erre o parâmetro.
 "Ganhos" é a soma das taxas das corridas entregues, não extrato: o acerto é com a Goby.
 
-### Nina: triagem dos motoboys (03/10/2026)
+### Nina: triagem de entregadores e restaurantes (03/10/2026)
 
 O `identificar` da Goby devolve, além de quem é e da pausa, o que a Nina precisa pra fazer a
 triagem numa chamada só (o nó **Monta contexto** transforma em texto pro prompt):
@@ -113,6 +117,22 @@ triagem numa chamada só (o nó **Monta contexto** transforma em texto pro promp
 chega ao backend e tudo pareceria sem resposta); mensagens de menos de 90 s não contam (é a
 rajada que outra execução ainda está respondendo); envio do painel que falhou não conta como
 resposta; mídia sem texto e nota interna são puladas.
+
+**Quem é e qual o problema.** Número que a Nina não conhece recebe, na primeira resposta,
+as duas perguntas numa frase só: é entregador ou restaurante, e o que aconteceu. O problema
+fica guardado na conversa: depois de identificar, ela resolve ele, sem recomeçar. No n8n, o
+IF **Entregador?** manda o entregador pro agente dele; o novo IF **Restaurante?** manda a loja
+pro **Agente Nina (loja)**; o resto fica no agente geral, que é quem identifica.
+
+**Restaurante.** `empresas` da Goby não tem telefone, então a loja se identifica pelo
+**CNPJ** (tool "Identificar restaurante"). Nome de loja não serve: é público, e daria a
+qualquer um o movimento dela. O vínculo fica em `goby_vinculos/{telefone}` com `tipo: 'loja'`
+(30 dias, mesmas 3 falhas em 24 h), a conversa ganha o selo **identificado pelo CNPJ** e o
+mesmo botão Desfazer. Identificada, a loja vê os pedidos em andamento (número, etapa e só o
+primeiro nome do entregador), um pedido dela pelo número e a semana (entregues, canceladas,
+soma das taxas e quanto por dia). Pedido de outra loja volta sem nenhum detalhe. Problema que
+precisa de alguém (entregador sumido, cancelar, cobrança) vira `[SUPORTE]` com
+`RESUMO: loja · pedido N · o que aconteceu`.
 
 **Número que não está no cadastro.** Se a pessoa diz que é entregador, a Nina pede nome e
 sobrenome e chama "Me identificar". O backend casa com um cadastro **ativo** cujo primeiro
