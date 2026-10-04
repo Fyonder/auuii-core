@@ -155,6 +155,16 @@ baixo. Se a pessoa já disse o que precisa, a Nina cumprimenta em poucas palavra
 Depois do primeiro contato ela não cumprimenta de novo. Com a ponte fora, `primeiroContato`
 vem nulo e a Nina não força a saudação.
 
+**Modo suporte** (dono, 04/10/2026). Quando o número em `SUPORTE_WHATSAPP` (o mesmo que
+recebe os avisos da Nina) escreve pro número da Goby, a Nina vira ferramenta de consulta da
+equipe (**Agente Nina (suporte)**, IF **Suporte?**): sem menu, sem chamar atendente. Ela
+consulta entregadores e lojas pelo nome, parte do nome, código ou CNPJ (nome completo,
+código, telefone, ativo, corridas em andamento), as corridas em aberto de um entregador e
+qualquer pedido pelo número. As rotas `GET /api/suporte/goby/suporte/{cadastro,corridas,pedido}`
+conferem no backend que quem pergunta é o `SUPORTE_WHATSAPP` (o do Render): outro número
+recebe 403, mesmo que a IA erre. Sem valores em R$. Se a consulta falhar, ela diz que não
+respondeu, e não "não achei".
+
 **Menu pra número desconhecido** (dono, 04/10/2026). Quem o robô e o backend não conhecem
 recebe, a qualquer mensagem: "Pra eu te ajudar, me diz quem é você: 1 - Motoboy,
 2 - Restaurante". "1" → "Me manda seu nome completo"; "2" → "Me manda o CNPJ da loja". A
