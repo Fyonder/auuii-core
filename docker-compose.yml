@@ -60,6 +60,9 @@ services:
       AUUII_API_TOKEN: ${AUUII_API_TOKEN:-}
       # Chave fixa da Nina (Goby) — mesmo valor de SUPORTE_API_KEY_GOBY no Render.
       AUUII_API_TOKEN_GOBY: ${AUUII_API_TOKEN_GOBY:-}
+      # Robo da Goby (sistema do socio): rota quem, perfil, fila, reservas, vagas, desempenho, ranking
+      ROBO_GOBY_URL: ${ROBO_GOBY_URL:-https://emcynyuzuafovconujwo.supabase.co/functions/v1/robo-goby}
+      ROBO_GOBY_KEY: ${ROBO_GOBY_KEY:-}
       # instancia do WhatsApp e numero do suporte humano (handoff)
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-auuii}
       SUPORTE_WHATSAPP: ${SUPORTE_WHATSAPP:-}
