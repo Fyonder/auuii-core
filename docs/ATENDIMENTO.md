@@ -101,6 +101,34 @@ backend força `instancia=goby` em identificar, pausa e handoff e responde **403
 qualquer rota da Auuii: a Nina nunca lê dado da Auuii, mesmo que a IA erre o parâmetro.
 "Ganhos" é a soma das taxas das corridas entregues, não extrato: o acerto é com a Goby.
 
+### Robô da Goby: quem é e os dados do motoboy (04/10/2026)
+
+O sistema da Goby (do sócio) tem um robô que responde direto: Supabase Edge Function
+`robo-goby`, `GET ?telefone=<chatId>&rota=<rota>`, cabeçalho `x-api-key`. No Kali, a URL e a
+chave ficam em `ROBO_GOBY_URL` e `ROBO_GOBY_KEY` (no `.env`; o compose repassa ao n8n). A
+chave é gerada e revogada no painel do sócio, só serve para as rotas do robô (não é senha do
+banco) e cada consulta aparece no "Registro" dele.
+
+| Rota | O que traz |
+|---|---|
+| `quem` | `tipo`: motoboy, loja, equipe ou desconhecido; `nome`, `codigo` |
+| `perfil` | patente, moedas, total de entregas, categoria |
+| `fila` | posição na fila da vez, quem está na vez (`sem_ciclo` = fila parada) |
+| `reservas` | turnos que ele reservou |
+| `vagas` | turnos abertos (reservar é pelo app, na vez dele) |
+| `desempenho` | 30 dias (entregas, diárias, % no prazo, km) e entregas por dia da semana |
+| `ranking` | top 5 da semana e a posição dele |
+
+No fluxo: **Robô: quem** roda logo depois do `identificar` e decide o perfil; o backend Auuii
+(telefone, nome, CNPJ) só vale quando o robô diz desconhecido ou está fora do ar (8 s de
+limite, erro não derruba nada). O **Monta contexto** passa a ser a fonte do perfil para os IFs
+e para o agente. O agente do entregador tem uma ferramenta só, **Robô da Goby**, com a rota
+como parâmetro; "Meu cadastro" e "Minha semana" saíram. Equipe vai para o agente geral,
+avisado de que é colega.
+
+**Trava do financeiro** (regra do robô, adotada em toda a Nina): nenhuma resposta tem valor em
+R$ — taxa, ganho, acerto, fatura, Pix. Dinheiro é com a equipe; a Nina oferece um atendente.
+
 ### Nina: triagem de entregadores e restaurantes (03/10/2026)
 
 O `identificar` da Goby devolve, além de quem é e da pausa, o que a Nina precisa pra fazer a
