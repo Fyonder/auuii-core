@@ -885,3 +885,13 @@ for _n in f["nodes"]:
 ARQ.write_text(json.dumps(f, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 print(f"ok: {len(f['nodes'])} nos; tools entregador={tools_entregador}; geral={tools_geral}; loja={tools_loja}")
 print("prompt entregador:", len(ENTREGADOR), "chars; geral:", len(GERAL), "chars; loja:", len(LOJA), "chars")
+
+# Obsidian da Nina (Celebro 2/nina): toda função tem nota. Avisa se ficou pra trás.
+try:
+    import importlib.util as _iu
+    _spec = _iu.spec_from_file_location("checa_obsidian_nina", Path(__file__).with_name("checa_obsidian_nina.py"))
+    _m = _iu.module_from_spec(_spec); _spec.loader.exec_module(_m)
+    if _m.main() != 0:
+        print("!!! ATUALIZE o Obsidian da Nina (Celebro 2/nina) antes de publicar: regra do dono.")
+except Exception as _e:
+    print("checagem do Obsidian nao rodou:", _e)
