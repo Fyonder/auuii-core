@@ -151,7 +151,17 @@ const blocoFila = id.aguardandoHumano === true ? {json.dumps(FILA, ensure_ascii=
 // ── Primeiro contato (dono, 03/10/2026: "no primeiro contato tem que perguntar o que esse
 // usuário precisa"). O backend diz se alguém já falou com a pessoa nas últimas 12 h.
 const norm = (t) => String(t ?? '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
-const msg = $('Normaliza').first().json.message || '';
+// ── Mensagens seguidas (dono, 05/10/2026): o backend devolve a sequência inteira na última
+// (rajada.mensagens). Os textos viram uma mensagem só; mídia no meio vira um aviso pra IA.
+const N = $('Normaliza').first().json;
+const NOMES_MIDIA = {{ audio: 'um áudio', imagem: 'uma imagem', figurinha: 'uma figurinha', video: 'um vídeo', documento: 'um arquivo', localizacao: 'uma localização', contato: 'um contato', outro: 'uma mensagem que não é texto' }};
+const seq = (id.rajada && id.rajada.ultima === true && Array.isArray(id.rajada.mensagens) && id.rajada.mensagens.length) ? id.rajada.mensagens : null;
+const textos = seq ? seq.map((m) => String(m.texto || '').trim()).filter(Boolean) : [String(N.message || '').trim()].filter(Boolean);
+const midias = seq ? seq.filter((m) => m.tipo && m.tipo !== 'texto' && !String(m.texto || '').trim()).map((m) => m.tipo) : (N.midia && !String(N.message || '').trim() ? [N.midia] : []);
+const msg = textos.join('\\n');
+const soMidia = !msg && midias.length > 0;
+const midia = midias.length ? midias[midias.length - 1] : '';
+const mensagem = msg + (msg && midias.length ? '\\n[Também mandou ' + [...new Set(midias)].map((t) => NOMES_MIDIA[t] || NOMES_MIDIA.outro).join(' e ') + ', que você não consegue ver nem ouvir: responda o texto e diga que só entende mensagem escrita, pra ela mandar aquilo de novo por texto.]' : '');
 const primeiro = (n) => (String(n || '').trim().split(/\\s+/)[0] || '');
 const nomeCadastro = primeiro(id.nome);
 const nomeZap = primeiro($('Normaliza').first().json.nome);
@@ -225,7 +235,7 @@ if (!['motoboy', 'restaurante', 'equipe', 'suporte'].includes(id.perfil) && id.a
   if (st?.assunto && blocoMenu) blocoMenu += ' Antes, ela tinha dito: "' + limpa(st.assunto) + '". Depois de identificar, resolva isso.';
 }}
 
-return [{{ json: {{ perfil: id.perfil || 'desconhecido', nome: id.nome || '', fonteQuem, modoRetirada: retiradaLigada ? 'ligada' : 'triagem', blocoQuem, blocoMenu, blocoPendentes, blocoCorridas, blocoRetirada, blocoFila, blocoInicio, saudacaoPronta }} }}];
+return [{{ json: {{ perfil: id.perfil || 'desconhecido', nome: id.nome || '', fonteQuem, modoRetirada: retiradaLigada ? 'ligada' : 'triagem', blocoQuem, blocoMenu, blocoPendentes, blocoCorridas, blocoRetirada, blocoFila, blocoInicio, saudacaoPronta, mensagem, soMidia, midia, juntou: seq ? seq.length : 1 }} }}];
 """
 add_node({
     "parameters": {"jsCode": JS_CONTEXTO},
@@ -942,6 +952,76 @@ for n in f["nodes"]:
         if h.get("name") == "x-suporte-api-key" and "AUUII_API_TOKEN" in h.get("value", ""):
             h["value"] = CHAVE_NINA
 
+# ── 12. Mensagens seguidas viram uma resposta só (dono, 05/10/2026) ──────────────────
+# "Quando o usuário manda mais de 1 mensagem seguida, espera um pouco e agrupa." Mensagem do
+# WhatsApp espera NINA_ESPERA_JUNTAR segundos (padrão 8) e o Identificar manda &espera=: o
+# backend (inbox.rajadaDaMensagem) diz se chegou outra dele depois. Chegou → esta execução
+# termina sem responder ("Junta na próxima"); é a última → `rajada.mensagens` traz a
+# sequência e o Monta contexto junta os textos em `mensagem`, que é o que os agentes leem.
+# Backend antigo ou ponte sem a mensagem → rajada null → responde só esta (como antes).
+ESPERA = "(Number($env.NINA_ESPERA_JUNTAR) || 8)"
+VEIO_DO_ZAP = "$('Normaliza').first().json.canal === 'whatsapp' && !!$('Normaliza').first().json.msgId"
+
+def _if(nome, expr, pos):
+    return {
+        "parameters": {"conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "loose", "version": 2},
+                                      "conditions": [{"id": nome, "leftValue": "={{ " + expr + " }}", "rightValue": "", "operator": {"type": "boolean", "operation": "true", "singleValue": True}}],
+                                      "combinator": "and"}, "options": {}},
+        "name": nome, "type": "n8n-nodes-base.if", "typeVersion": 2.2, "position": pos, "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/" + nome)),
+    }
+
+px, py = nodes["Normaliza"]["position"]
+add_node(_if("Junta mensagens?", VEIO_DO_ZAP, [px + 120, py + 160]))
+add_node({
+    "parameters": {"amount": "={{ " + ESPERA + " }}", "unit": "seconds"},
+    "name": "Espera mais mensagens", "type": "n8n-nodes-base.wait", "typeVersion": 1.1,
+    "position": [px + 300, py + 160], "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Espera mais mensagens")),
+    "webhookId": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Espera mais mensagens/webhook")),
+    "notesInFlow": True, "notes": "junta as mensagens seguidas (NINA_ESPERA_JUNTAR, padrão 8 s)",
+})
+conn["Normaliza"]["main"] = [[{"node": "Junta mensagens?", "type": "main", "index": 0}]]
+conn["Junta mensagens?"] = {"main": [[{"node": "Espera mais mensagens", "type": "main", "index": 0}],
+                                     [{"node": "Identificar", "type": "main", "index": 0}]]}
+conn["Espera mais mensagens"] = {"main": [[{"node": "Identificar", "type": "main", "index": 0}]]}
+
+_url = nodes["Identificar"]["parameters"]["url"]
+if "&espera=" not in _url:
+    nodes["Identificar"]["parameters"]["url"] = _url + "&espera={{ " + VEIO_DO_ZAP + " ? " + ESPERA + " : '' }}"
+
+# Chegou outra dele depois: não responde esta (a mais nova responde tudo).
+bx, by = nodes["Backend respondeu?"]["position"]
+add_node(_if("Chegou mensagem mais nova?", "$('Identificar').first().json.rajada?.ultima === false", [bx + 110, by - 170]))
+add_node({
+    "parameters": {"assignments": {"assignments": [
+        {"id": "j1", "name": "ok", "type": "boolean", "value": "={{ true }}"},
+        {"id": "j2", "name": "juntou", "type": "string", "value": "=a mensagem {{ $('Normaliza').first().json.msgId }} vai junto com a mais nova"},
+    ]}, "options": {}},
+    "name": "Junta na próxima", "type": "n8n-nodes-base.set", "typeVersion": 3.4,
+    "position": [bx + 330, by - 300], "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Junta na próxima")),
+})
+conn["Backend respondeu?"]["main"][0] = [{"node": "Chegou mensagem mais nova?", "type": "main", "index": 0}]
+conn["Chegou mensagem mais nova?"] = {"main": [[{"node": "Junta na próxima", "type": "main", "index": 0}],
+                                               [{"node": ROBO_QUEM, "type": "main", "index": 0}]]}
+
+# Os agentes leem a sequência junta; "pergunta" (painel/aviso ao suporte) também.
+MENSAGEM = "={{ $('Monta contexto').first().json.mensagem }}"
+for _ag in ("Agente Nina", "Agente Nina (entregador)", "Agente Nina (loja)", "Agente Nina (suporte)"):
+    nodes[_ag]["parameters"]["text"] = MENSAGEM
+for _n in ("Saudação", "Prepara envio"):
+    for _a in nodes[_n]["parameters"]["assignments"]["assignments"]:
+        if _a["name"] == "pergunta":
+            _a["value"] = MENSAGEM
+
+# Só mídia (áudio, imagem, figurinha...): "só entendo texto, manda de novo" (dono, 05/10/2026).
+nodes["So midia?"]["parameters"]["conditions"]["conditions"][0]["leftValue"] = "={{ $('Monta contexto').first().json.soMidia === true }}"
+for _a in nodes["Pede texto"]["parameters"]["assignments"]["assignments"]:
+    if _a["name"] == "pergunta":
+        _a["value"] = "={{ '[' + $('Monta contexto').first().json.midia + ']' }}"
+    if _a["name"] == "reply":
+        _a["value"] = ("={{ (({ audio: 'Não consigo ouvir áudio', imagem: 'Não consigo ver imagem', figurinha: 'Não consigo ver figurinha', "
+                       "video: 'Não consigo ver vídeo', documento: 'Não consigo abrir arquivo' })[$('Monta contexto').first().json.midia] || 'Não consigo abrir esse tipo de mensagem')"
+                       " + '. Eu só entendo texto 😊 Pode mandar de novo escrevendo?' }}")
+
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
 texto = json.dumps(f, ensure_ascii=False)
@@ -977,7 +1057,11 @@ for p_ in (ENTREGADOR, LOJA, GERAL):
     assert "blocoInicio" in p_
 assert "blocoMenu" in GERAL and "$getWorkflowStaticData" in nodes["Monta contexto"]["parameters"]["jsCode"]
 assert [[d["node"] for d in o] for o in conn["Restaurante?"]["main"]] == [["Agente Nina (loja)"], ["Agente Nina"]]
-assert [d["node"] for d in conn["Backend respondeu?"]["main"][0]] == [ROBO_QUEM]
+assert [d["node"] for d in conn["Backend respondeu?"]["main"][0]] == ["Chegou mensagem mais nova?"]
+assert [[d["node"] for d in o] for o in conn["Chegou mensagem mais nova?"]["main"]] == [["Junta na próxima"], [ROBO_QUEM]]
+assert [[d["node"] for d in o] for o in conn["Junta mensagens?"]["main"]] == [["Espera mais mensagens"], ["Identificar"]]
+assert [d["node"] for d in conn["Normaliza"]["main"][0]] == ["Junta mensagens?"]
+assert all(nodes[_ag]["parameters"]["text"] == MENSAGEM for _ag in ("Agente Nina", "Agente Nina (entregador)", "Agente Nina (loja)", "Agente Nina (suporte)"))
 assert [d["node"] for d in conn[ROBO_QUEM]["main"][0]] == ["Monta contexto"]
 assert "Meu cadastro" not in nodes and "Minha semana" not in nodes
 for _n in ("Entregador?", "Restaurante?"):
