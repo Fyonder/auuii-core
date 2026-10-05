@@ -109,3 +109,13 @@ test('envio do painel pela Goby não é confundido com o mesmo texto saindo pela
     assert.equal(ev.autor, 'operador');
     assert.equal(ev.reqId, 'req_g');
 });
+
+test('vários números de suporte (separados por vírgula): o aviso interno pra qualquer um é do sistema', () => {
+    const c = new Classificador({ suporteWhatsapp: '+55 (79) 99136-7323, 5544988887777' });
+    const pro1 = c.classificar(enviada(msg({ id: 'A1', jid: '557991367323@s.whatsapp.net', fromMe: true, texto: '🛎️ AVISO INTERNO DO SUPORTE · GOBY' })));
+    const pro2 = c.classificar(enviada(msg({ id: 'A2', jid: '554488887777@s.whatsapp.net', fromMe: true, texto: '🛎️ AVISO INTERNO DO SUPORTE · GOBY' })));
+    const outro = c.classificar(enviada(msg({ id: 'A3', jid: '554499429771@s.whatsapp.net', fromMe: true, texto: '🛎️ AVISO INTERNO DO SUPORTE · GOBY' })));
+    assert.equal(pro1.autor, 'sistema');
+    assert.equal(pro2.autor, 'sistema');
+    assert.equal(outro.autor, 'ia');
+});

@@ -113,8 +113,9 @@ const canon = (v) => {{
   if (d.startsWith('55') && (d.length === 12 || d.length === 13)) return '55' + d.slice(2, 4) + d.slice(-8);
   return d;
 }};
-const numeroSuporte = String($env.SUPORTE_WHATSAPP || '');
-const ehSuporte = !!numeroSuporte && canon($('Normaliza').first().json.chatId) === canon(numeroSuporte);
+// SUPORTE_WHATSAPP pode ter vários números, separados por vírgula ou ponto e vírgula.
+const suportes = String($env.SUPORTE_WHATSAPP || '').split(/[,;\\n]+/).map(canon).filter((k) => k.length >= 10);
+const ehSuporte = suportes.includes(canon($('Normaliza').first().json.chatId));
 if (ehSuporte) id.perfil = 'suporte';
 let blocoQuem = ehSuporte ? 'QUEM É: o WhatsApp do SUPORTE da Goby (equipe interna).' : '';
 if (ehSuporte) {{}}
@@ -852,6 +853,32 @@ DIGITANDO_MS = 300
 nodes["Mostrar digitando"]["parameters"]["jsonBody"] = (
     "={{ JSON.stringify({ number: $('Normaliza').first().json.chatId, presence: 'composing', delay: %d }) }}" % DIGITANDO_MS
 )
+
+# ── 10d. Vários números de suporte ───────────────────────────────────────────────
+# SUPORTE_WHATSAPP = "5544999990000,5532988887777" (vírgula ou ponto e vírgula; dono, 05/10/2026).
+# O aviso de "precisa de humano" vai pra todos; quem escreve de qualquer um deles não abre chamado.
+NUMEROS_SUPORTE = r"String($env.SUPORTE_WHATSAPP || '').split(/[,;\n]+/).map(n => n.replace(/\D/g, '')).filter(n => n.length >= 10)"
+nodes["Handoff de outro numero?"]["parameters"]["conditions"]["conditions"][0]["leftValue"] = (
+    "={{ !" + NUMEROS_SUPORTE + r".some(n => n.slice(-8) === String($('Canal e WhatsApp?').first().json.chatId).replace(/\D/g, '').slice(-8)) }}"
+)
+add_node({
+    "parameters": {"jsCode": "// Um aviso por número de suporte (SUPORTE_WHATSAPP pode ter vários, separados por vírgula).\n"
+                             "return " + NUMEROS_SUPORTE + ".map((numero) => ({ json: { numero } }));\n"},
+    "name": "Números do suporte",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [-2936, -400],
+    "notesInFlow": True,
+    "notes": "um aviso pra cada número",
+    "id": novo_id(),
+})
+conn["Suporte configurado?"]["main"][0] = [{"node": "Números do suporte", "type": "main", "index": 0}]
+conn["Números do suporte"] = {"main": [[{"node": "Avisar suporte", "type": "main", "index": 0}]]}
+_av = nodes["Avisar suporte"]["parameters"]["jsonBody"]
+if "number: $json.numero" not in _av:
+    assert _av.count("number: $env.SUPORTE_WHATSAPP") == 1
+    nodes["Avisar suporte"]["parameters"]["jsonBody"] = _av.replace("number: $env.SUPORTE_WHATSAPP", "number: $json.numero")
+assert "SUPORTE_WHATSAPP" not in nodes["Avisar suporte"]["parameters"]["jsonBody"]
 
 # ── 11. Chave da Nina com fallback ─────────────────────────────────────────────────
 # AUUII_API_TOKEN_GOBY (chave fixa da Goby, so le dados da Goby) quando existir no ambiente do n8n;
