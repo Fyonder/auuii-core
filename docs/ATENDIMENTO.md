@@ -173,6 +173,12 @@ ferramentas a mais no modo suporte:
   `loja` deixa só quem tem vaga naquela loja. Demora uns 5-10 s (o dia inteiro da operação).
 - **Motoboy no dia** → `GET /api/suporte/goby/suporte/motoboy?entregador=&dia=`: um entregador,
   com a lista das corridas do dia, as em aberto agora e as vagas com endereço.
+- **Vagas do dia** (dono, 05/10/2026) → `GET /api/suporte/goby/suporte/vagas?dia=hoje|amanha|ontem|AAAA-MM-DD&loja=&periodo=manha|almoco|tarde|noite|agora&livres=sim&nomes=sim`:
+  TODAS as vagas do dia (a operação vai das 5:30 à meia-noite), livres e ocupadas. Totais
+  (vagas, posições, ocupadas, livres, livres que ainda dá tempo) e uma linha por vaga:
+  `18:00-22:30 Saborê · 1 livre de 3 · rolando agora`. Com `loja` ou `periodo` traz quem
+  está em cada vaga (sem filtro não, pelo limite de tokens da Groq). `posicoes` de
+  `vagas_vagas` = quantos cabem; cada `vagas_reservas` ocupa uma. Backend PR #64.
 
 De onde vem (`gobyVagas.js` no backend; o espelho passou a ler `vagas_reservas`, `vagas_vagas`
 e `diarias_publico`, sem nenhuma coluna de valor): a vaga é `vagas_vagas` (horário de

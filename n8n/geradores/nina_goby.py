@@ -684,6 +684,26 @@ DIA_COMPACTO = (
 _i_lista = SUPORTE.index("- Lista do dia:")
 _f_lista = SUPORTE.index("\n", _i_lista) + 1
 SUPORTE = SUPORTE[:_i_lista] + DIA_COMPACTO + SUPORTE[_f_lista:]
+# Vagas do dia (dono, 05/10/2026; backend PR #64): os números do suporte perguntam de TODAS as
+# vagas do dia (a operação vai das 5:30 à meia-noite): quais tem, quais sobram, quem está nelas.
+VAGAS_DO_DIA_FERRAMENTA = (
+    "- \"Vagas do dia\" (dia; loja, periodo e livres opcionais): TODAS as vagas do dia (a operação vai das 5:30 à meia-noite), "
+    "uma linha pronta por vaga: horário, loja, bairro, \"N livres de M\" ou \"cheia\", \"já acabou\" ou \"rolando agora\". "
+    "Use pra \"quais vagas tem hoje\", \"tem vaga sobrando?\", \"vagas da noite\", \"quem tá na Kikoxinha\", \"vagas de amanhã\".\n"
+)
+VAGAS_DO_DIA = (
+    "- Vagas do dia: mande primeiro o resumo (vagas, posições, ocupadas, livres; se for hoje, quantas livres ainda dá tempo de preencher) "
+    "e depois TODAS as linhas que vieram, uma por linha, sem resumir nem pular. "
+    "\"sobrando\", \"disponível\", \"livre\": livres=sim. \"agora\", \"daqui pra frente\", \"as que faltam\": periodo=agora. "
+    "\"manhã\", \"almoço\", \"tarde\", \"noite\": periodo. Quem está nas vagas: passe loja ou periodo (os nomes vêm junto) ou nomes=sim. "
+    "Nenhuma livre: diga que estão todas cheias. vagasIndisponiveis true: \"as vagas não responderam agora\". "
+    "Vaga livre é \"Vagas do dia\"; quem chegou, atrasou ou faltou é \"Dia dos motoboys\".\n"
+)
+_alvo_motoboy = SUPORTE.index("- \"Motoboy no dia\"")
+_fim_motoboy = SUPORTE.index("\n", _alvo_motoboy) + 1
+SUPORTE = SUPORTE[:_fim_motoboy] + VAGAS_DO_DIA_FERRAMENTA + SUPORTE[_fim_motoboy:]
+_i_dia = SUPORTE.index(DIA_COMPACTO) + len(DIA_COMPACTO)
+SUPORTE = SUPORTE[:_i_dia] + VAGAS_DO_DIA + SUPORTE[_i_dia:]
 
 
 import copy as _copy
@@ -728,6 +748,37 @@ _dia["toolDescription"] = (
     "vagas com loja, horario e situacao: chegou, trabalhando, ATRASADO, NAO CHEGOU, comeca em X min), quem tem problema primeiro. "
     "Parametros: dia (hoje, ontem ou AAAA-MM-DD), loja (opcional) e situacao (opcional: nao_chegou, atrasado...). So pro WhatsApp do suporte."
 )
+
+_q_vagas = lambda nome, desc, padrao: {"name": nome, "value": f"={{{{ $fromAI('{nome}', '{desc}', 'string', '{padrao}') }}}}"}
+add_node({
+    "parameters": {
+        "toolDescription": (
+            "TODAS as vagas (turnos) da Goby num dia, livres e ocupadas: totais (vagas, posicoes, ocupadas, livres, livresAindaDaTempo) "
+            "e uma linha pronta por vaga (horario, loja, bairro, N livres de M ou cheia, ja acabou ou rolando agora; com loja ou periodo, "
+            "quem esta nela). Parametros: dia (hoje, amanha, ontem ou AAAA-MM-DD), loja, periodo (manha, almoco, tarde, noite ou agora), "
+            "livres (sim = so as que tem posicao livre), nomes (sim = quem esta em cada vaga). So pro WhatsApp do suporte."
+        ),
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/suporte/vagas",
+        "sendQuery": True,
+        "queryParameters": {"parameters": [
+            {"name": "telefone", "value": "={{ $('Normaliza').first().json.chatId }}"},
+            _q_vagas("dia", "hoje, amanha, ontem ou AAAA-MM-DD; vazio = hoje", "hoje"),
+            _q_vagas("loja", "nome da loja pra filtrar; vazio = todas", ""),
+            _q_vagas("periodo", "manha, almoco, tarde, noite ou agora (as que ainda nao acabaram); vazio = o dia todo", ""),
+            _q_vagas("livres", "sim = so as vagas com posicao livre; vazio = todas", ""),
+            _q_vagas("nomes", "sim = traz quem esta em cada vaga; vazio = so com loja ou periodo", ""),
+        ]},
+        "sendHeaders": True,
+        "headerParameters": {"parameters": [{"name": "x-suporte-api-key", "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"}]},
+        "options": {"timeout": 30000},
+    },
+    "name": "Vagas do dia",
+    "type": "n8n-nodes-base.httpRequestTool",
+    "typeVersion": 4.2,
+    "position": [-3648, -1900],
+    "id": novo_id(),
+})
+liga("Vagas do dia", "Agente Nina (suporte)", tipo="ai_tool")
 
 add_node({
     "parameters": {
@@ -921,7 +972,7 @@ assert [d["node"] for d in conn["Veio do WhatsApp?"]["main"][1]] == ["Resposta p
 assert [[d["node"] for d in o] for o in conn["Resposta pronta?"]["main"]] == [["Saudação"], ["Suporte?"]]
 assert [d["node"] for d in conn["Espera o limite"]["main"][0]] == ["Suporte?"]
 assert [[d["node"] for d in o] for o in conn["Suporte?"]["main"]] == [["Agente Nina (suporte)"], ["Entregador?"]]
-assert tools_de("Agente Nina (suporte)") == ["Buscar cadastro", "Buscar pedido", "Corridas do entregador", "Dia dos motoboys", "Motoboy no dia"], tools_de("Agente Nina (suporte)")
+assert tools_de("Agente Nina (suporte)") == ["Buscar cadastro", "Buscar pedido", "Corridas do entregador", "Dia dos motoboys", "Motoboy no dia", "Vagas do dia"], tools_de("Agente Nina (suporte)")
 for p_ in (ENTREGADOR, LOJA, GERAL):
     assert "blocoInicio" in p_
 assert "blocoMenu" in GERAL and "$getWorkflowStaticData" in nodes["Monta contexto"]["parameters"]["jsCode"]
