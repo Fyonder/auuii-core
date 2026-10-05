@@ -12,8 +12,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        0,
-        0
+        -5872,
+        -464
       ],
       "webhookId": "903448ad-de33-436c-b1eb-fb68ecdc89b8",
       "notesInFlow": true,
@@ -70,8 +70,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        440,
-        0
+        -5664,
+        -464
       ],
       "notesInFlow": true,
       "id": "82adf7cb-2eea-4c3c-b3e4-535d3a7aa030",
@@ -107,8 +107,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        660,
-        -220
+        -5472,
+        -656
       ],
       "notesInFlow": true,
       "id": "2fe3cf7a-4c1a-4304-8b1d-e5977cf79103",
@@ -168,8 +168,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        660,
-        0
+        -5472,
+        -464
       ],
       "notesInFlow": true,
       "id": "ea2718fc-2d28-4bf1-b60e-29b0ef1642f9",
@@ -193,8 +193,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        880,
-        0
+        -5232,
+        -464
       ],
       "notesInFlow": true,
       "id": "79250691-d2b1-4116-833b-9f6134fec772",
@@ -215,8 +215,8 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        880,
-        2080
+        -4608,
+        -960
       ],
       "id": "24502151-0da9-40ee-a133-ff45972cc59b",
       "onError": "continueRegularOutput",
@@ -238,8 +238,8 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        880,
-        1120
+        -4704,
+        -608
       ],
       "id": "9471dd81-67af-40ac-99b7-89b54725e60f",
       "onError": "continueRegularOutput",
@@ -257,8 +257,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "position": [
-        0,
-        2080
+        -4912,
+        -240
       ],
       "id": "cd737d72-fd8b-4f13-8916-43a56f8a2695",
       "name": "Groq Chat Model",
@@ -281,8 +281,8 @@
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1.3,
       "position": [
-        0,
-        2480
+        -4320,
+        -192
       ],
       "notesInFlow": true,
       "id": "2e7972e6-00d8-4a20-894c-62150419cc69",
@@ -354,8 +354,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        2700,
-        1360
+        -4048,
+        -528
       ],
       "notesInFlow": true,
       "id": "d3c95a8c-7c2d-4ce1-854b-7279fc294c2b",
@@ -391,8 +391,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        3800,
-        1360
+        -3296,
+        -544
       ],
       "notesInFlow": true,
       "id": "b361fc78-5fa4-4603-a696-4a9f610bdbdd",
@@ -424,8 +424,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        4900,
-        1360
+        -2816,
+        -576
       ],
       "notesInFlow": true,
       "id": "4123b310-0c1e-410a-a049-f291fb4dd2a0",
@@ -461,8 +461,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2920,
-        1360
+        -3808,
+        -528
       ],
       "notesInFlow": true,
       "id": "c0bb1c60-5846-41b4-a6a8-72223018a994",
@@ -494,8 +494,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3580,
-        1360
+        -3568,
+        -544
       ],
       "notesInFlow": true,
       "id": "28c2cd6e-b5aa-4d92-ab55-9105743c0ee1",
@@ -538,8 +538,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        3140,
-        1580
+        -3552,
+        -352
       ],
       "notesInFlow": true,
       "id": "f47c78ce-41d9-4e13-9ccf-f17958c26ec8",
@@ -573,8 +573,8 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
-        1240,
-        1360
+        -4608,
+        -416
       ],
       "id": "22d2b831-3f28-446d-9555-94b4067ecf24"
     },
@@ -586,8 +586,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2260,
-        1360
+        -4272,
+        -528
       ],
       "notesInFlow": true,
       "id": "bdd522fc-dd5c-4a92-b03c-56df148aff7f",
@@ -623,8 +623,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        4460,
-        1360
+        -3056,
+        -560
       ],
       "notesInFlow": true,
       "id": "ad475cae-fc64-474d-98fc-99892adcf1e2",
@@ -678,8 +678,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        5120,
-        1360
+        -656,
+        208
       ],
       "notesInFlow": true,
       "id": "e3901e59-a88f-44dc-9eeb-9eeec7092ed1",
@@ -714,8 +714,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2200,
-        0
+        -2768,
+        -208
       ],
       "notesInFlow": true,
       "id": "f575904d-872d-43b0-bf87-518689674f4a",
@@ -747,8 +747,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2420,
-        0
+        -2560,
+        -208
       ],
       "notesInFlow": true,
       "id": "0ee2e5b0-28c9-49e9-a682-83c827c78cc3",
@@ -781,8 +781,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2640,
-        0
+        -2352,
+        -208
       ],
       "notesInFlow": true,
       "id": "eccfb54f-c86b-4aad-930a-62de56b9e3cd",
@@ -839,8 +839,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        220,
-        0
+        -5664,
+        -884
       ],
       "notesInFlow": true,
       "id": "56b405d2-c53e-47ad-b7a2-f61773ae9547",
@@ -876,8 +876,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1760,
-        0
+        -4752,
+        -464
       ],
       "notesInFlow": true,
       "id": "216e9e94-105f-4b6f-aa8f-28089c2a4143",
@@ -913,8 +913,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1980,
-        -220
+        -4692,
+        -704
       ],
       "notesInFlow": true,
       "id": "ec0cb8cf-026b-4a74-bd2d-0cd51cb41c52",
@@ -931,8 +931,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        0,
-        220
+        -5872,
+        -244
       ],
       "webhookId": "8576e0a2-5cf7-46a0-a05b-0bd85913271c",
       "notesInFlow": true,
@@ -958,8 +958,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        440,
-        -220
+        -5404,
+        -984
       ],
       "notesInFlow": true,
       "id": "23d60343-e398-497a-a798-0d4a7d3020e2",
@@ -996,8 +996,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1100,
-        0
+        -4992,
+        -464
       ],
       "id": "8b322776-4c5e-44d0-b933-5b9bd0fbe075"
     },
@@ -1055,8 +1055,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1320,
-        220
+        -4752,
+        -204
       ],
       "notesInFlow": true,
       "id": "30be3b3c-87ab-4386-ae2f-af2fcbe6d75e",
@@ -1080,8 +1080,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3140,
-        1360
+        -3608,
+        -708
       ],
       "notesInFlow": true,
       "id": "f4b2ffff-b450-435f-926c-84684a1d7512",
@@ -1118,8 +1118,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        3360,
-        1360
+        -3408,
+        -708
       ],
       "id": "77fb6a69-98cf-46f7-96b9-a8e23565fabb"
     },
@@ -1153,8 +1153,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        4020,
-        1360
+        -3076,
+        -744
       ],
       "id": "a181bb6b-8e4e-44b1-970d-cacc1f3a01b7"
     },
@@ -1184,8 +1184,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        4240,
-        1140
+        -2856,
+        -804
       ],
       "notesInFlow": true,
       "id": "0c674ef8-2f3c-40ec-8ab0-1596693655db",
@@ -1202,8 +1202,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
       "typeVersion": 1,
       "position": [
-        0,
-        2280
+        -4912,
+        -60
       ],
       "id": "aa159f12-6e7e-485a-b7e9-2f33ab0486f2",
       "name": "Groq Reserva",
@@ -1246,8 +1246,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2480,
-        1360
+        -4052,
+        -528
       ]
     },
     {
@@ -1259,8 +1259,8 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        2700,
-        1140
+        -3832,
+        -728
       ],
       "webhookId": "a1f5e03e-570e-4b94-93eb-59bee5131589"
     },
@@ -1294,8 +1294,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1980,
-        0
+        -2988,
+        52
       ]
     },
     {
@@ -1353,8 +1353,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        2200,
-        220
+        -2768,
+        52
       ]
     },
     {
@@ -1386,8 +1386,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        440,
-        1120
+        -2068,
+        -208
       ]
     },
     {
@@ -1422,8 +1422,8 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
-        1420,
-        1360
+        -4288,
+        -416
       ],
       "id": "291b0f5a-497b-4ef7-ac8d-bd3873b4f8ff"
     },
@@ -1459,8 +1459,8 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
-        1600,
-        1360
+        -3968,
+        -416
       ],
       "id": "fb0ce083-a561-49f7-9f28-02a1f23a37b4"
     },
@@ -1472,8 +1472,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1540,
-        0
+        -4880,
+        -300
       ],
       "notesInFlow": true,
       "id": "7fdecf39-4e71-4003-97c8-b14ae8348c27",
@@ -1493,8 +1493,8 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        880,
-        1600
+        -4608,
+        -1300
       ],
       "id": "daef3c81-fc47-4ec3-be7a-b7f2fb8f3d57",
       "onError": "continueRegularOutput",
@@ -1531,8 +1531,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        550,
-        1600
+        -1848,
+        -100
       ]
     },
     {
@@ -1571,8 +1571,8 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
-        880,
-        2320
+        -4448,
+        -1104
       ],
       "id": "05ccbb2a-caff-48a2-a238-48d15cd6936d"
     },
@@ -1612,8 +1612,8 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
-        1060,
-        1360
+        -3808,
+        -416
       ],
       "id": "328e8dc1-e105-4494-9460-0231d1651587"
     },
@@ -1653,8 +1653,8 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
-        1060,
-        1840
+        -4288,
+        -1104
       ],
       "id": "cb45eaf3-8676-427e-81cf-eac86d56ec26"
     },
@@ -1686,8 +1686,8 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
-        880,
-        1840
+        -4448,
+        -1500
       ],
       "id": "0877575c-7d03-4f7e-a782-cdd06c122ac3"
     },
@@ -1723,8 +1723,8 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
-        1240,
-        1840
+        -4288,
+        -1500
       ],
       "id": "995661af-88a0-4b62-a5a1-6b7b504e4699"
     },
@@ -1760,8 +1760,8 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
-        1420,
-        1840
+        -4128,
+        -1500
       ],
       "id": "3abe4e43-16ce-4e0e-991f-467da8b5082e"
     },
@@ -1796,8 +1796,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2860,
-        0
+        -2208,
+        -208
       ],
       "notesInFlow": true,
       "notes": "primeiro contato so com 'oi': saudacao + o que precisa, sem IA"
@@ -1869,8 +1869,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        3080,
-        -220
+        -2000,
+        -380
       ]
     },
     {
@@ -1911,8 +1911,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1320,
-        0
+        -4992,
+        -300
       ],
       "onError": "continueRegularOutput",
       "notesInFlow": true,
@@ -1958,8 +1958,8 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
-        880,
-        1360
+        -4448,
+        -416
       ],
       "id": "69af1d1a-bbc7-4ca7-b2ed-fc4464c43bd7"
     },
@@ -1977,8 +1977,8 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        880,
-        640
+        -4608,
+        -1700
       ],
       "id": "f9997238-20f4-4e26-b361-4ce9f42ae6ca",
       "onError": "continueRegularOutput",
@@ -2018,8 +2018,8 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
-        880,
-        880
+        -4448,
+        -1900
       ],
       "id": "b7c48a49-ffdf-4003-8546-e50c2a80b0bb"
     },
@@ -2055,8 +2055,8 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
-        1060,
-        880
+        -4288,
+        -1900
       ],
       "id": "1e1051f9-a4ba-469f-81b7-cf9de633e814"
     },
@@ -2092,8 +2092,8 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
-        1240,
-        880
+        -4128,
+        -1900
       ],
       "id": "9037e203-5ed6-4418-ba17-fcbfa852dffb"
     },
@@ -2139,8 +2139,8 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
-        1420,
-        880
+        -3968,
+        -1900
       ],
       "id": "756f96ac-900a-4406-b0c8-6bf60ed5f767"
     },
@@ -2182,8 +2182,8 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
-        1600,
-        880
+        -3808,
+        -1900
       ],
       "id": "1ed74105-1559-42aa-aefa-c9d5eb1437c5"
     },
@@ -2237,8 +2237,8 @@
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
-        1780,
-        880
+        -3648,
+        -1900
       ],
       "id": "6c2b4dab-48d2-4855-8b0e-141ea43347f6"
     },
@@ -2271,8 +2271,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        3080,
-        0
+        -2208,
+        -40
       ]
     },
     {
@@ -2283,60 +2283,12 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4680,
-        1360
+        -2936,
+        -400
       ],
       "notesInFlow": true,
       "notes": "um aviso pra cada número",
       "id": "1b967ed1-0752-473e-8814-9decbf712600"
-    },
-    {
-      "parameters": {
-        "content": "## 1 · Chega a mensagem\nIgnora eco e grupo, pausa se alguém respondeu pelo aparelho, identifica quem é (backend + robô da Goby), confere pausa e mídia, mostra \"digitando\" e decide se é o suporte.",
-        "width": 3460,
-        "height": 860,
-        "color": 5
-      },
-      "name": "Nota · 1 · Chega a mensagem",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        -120,
-        -420
-      ],
-      "id": "nota-1-chega-a-mensagem"
-    },
-    {
-      "parameters": {
-        "content": "## 2 · Quem responde\nSuporte (equipe) · Entregador · Restaurante · Geral (desconhecido e menu). Ferramentas embaixo de cada agente; modelo e memória (à esquerda) são os mesmos pros quatro.",
-        "width": 2160,
-        "height": 2260,
-        "color": 4
-      },
-      "name": "Nota · 2 · Quem responde",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        -120,
-        440
-      ],
-      "id": "nota-2-quem-responde"
-    },
-    {
-      "parameters": {
-        "content": "## 3 · Sai a resposta\nTrata limite da Groq, confere se a conversa ainda está livre, envia (ou devolve no teste) e, se precisar de humano, registra o handoff e avisa os números do suporte.",
-        "width": 3240,
-        "height": 860,
-        "color": 6
-      },
-      "name": "Nota · 3 · Sai a resposta",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        2140,
-        940
-      ],
-      "id": "nota-3-sai-a-resposta"
     }
   ],
   "connections": {
