@@ -845,6 +845,14 @@ for _n, _d in DESCRICOES_SEM_DINHEIRO.items():
     if _n in nodes:
         nodes[_n]["parameters"]["toolDescription"] = _d
 
+# ── 10c. "digitando..." mais curto ─────────────────────────────────────────────────
+# Medido em 04/10: o sendPresence da Evolution segura a requisição pelo `delay` — era 1 s fixo
+# em toda resposta (de 8-9 s no total). 300 ms ainda mostra o "digitando".
+DIGITANDO_MS = 300
+nodes["Mostrar digitando"]["parameters"]["jsonBody"] = (
+    "={{ JSON.stringify({ number: $('Normaliza').first().json.chatId, presence: 'composing', delay: %d }) }}" % DIGITANDO_MS
+)
+
 # ── 11. Chave da Nina com fallback ─────────────────────────────────────────────────
 # AUUII_API_TOKEN_GOBY (chave fixa da Goby, so le dados da Goby) quando existir no ambiente do n8n;
 # sem ela, a chave geral AUUII_API_TOKEN - o backend aceita nas rotas /goby/* e usa o ?instancia=goby.

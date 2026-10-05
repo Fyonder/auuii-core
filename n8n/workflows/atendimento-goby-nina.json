@@ -774,7 +774,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ number: $('Normaliza').first().json.chatId, presence: 'composing', delay: 1000 }) }}",
+        "jsonBody": "={{ JSON.stringify({ number: $('Normaliza').first().json.chatId, presence: 'composing', delay: 300 }) }}",
         "options": {}
       },
       "name": "Mostrar digitando",
