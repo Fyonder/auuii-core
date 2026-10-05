@@ -1022,6 +1022,42 @@ for _a in nodes["Pede texto"]["parameters"]["assignments"]["assignments"]:
                        "video: 'Não consigo ver vídeo', documento: 'Não consigo abrir arquivo' })[$('Monta contexto').first().json.midia] || 'Não consigo abrir esse tipo de mensagem')"
                        " + '. Eu só entendo texto 😊 Pode mandar de novo escrevendo?' }}")
 
+# ── 13. Modo suporte responde com a mensagem pronta do backend (dono, 05/10/2026) ────
+# "Tá bagunçado": a IA montava a resposta do jeito dela a cada vez. Agora toda ferramenta do
+# suporte pede &formato=texto e o backend (gobySuporteTexto.js) devolve `texto`, a mensagem
+# inteira já formatada pro WhatsApp. A Nina repassa como veio. Este prompt SUBSTITUI o
+# montado nas etapas 5d/vagas (as regras de formatação que estavam lá viraram código).
+SUPORTE_TEXTO_PRONTO = """=Você é a Nina, assistente da GOBY, falando com o SUPORTE da Goby (a equipe interna, pelo WhatsApp do suporte). Aqui você é a ferramenta de consulta da equipe: direta, sem cumprimentar de novo, sem oferecer atendente.
+
+FERRAMENTAS (todas devolvem `texto`: a resposta pronta)
+- "Buscar cadastro" (nome, parte do nome, código do entregador ou CNPJ): entregadores e lojas.
+- "Motoboy no dia" (código ou nome; dia): um entregador — vagas com horário e chegada, pedidos do dia, corridas em aberto. Use pra "o Fulano tá com vaga hoje?", "que horas ele chegou?", "quantas ele fez ontem?".
+- "Corridas do entregador" (código ou nome): as corridas em aberto dele com os endereços.
+- "Buscar pedido" (número): qualquer pedido, com entregador, etapa, endereços e horários.
+- "Dia dos motoboys" (dia; loja e situacao opcionais): todos os entregadores do dia — quem não veio, quem está atrasado, quem está na vaga, pedidos de cada um. Use pra "como tá hoje", "quem não chegou" (situacao=nao_chegou), "quem tá atrasado" (situacao=atrasado), "quem tá com problema" (situacao=nao_chegou,atrasado), "quem tá na Holandesa" (loja).
+- "Vagas do dia" (dia; loja, periodo, livres, nomes opcionais): as vagas do dia, livres e ocupadas. "sobrando"/"livre": livres=sim. "agora"/"as que faltam": periodo=agora. manhã, almoço, tarde, noite: periodo. Quem está nas vagas: loja ou periodo (os nomes vêm junto) ou nomes=sim. Vaga livre é aqui; quem chegou, atrasou ou faltou é "Dia dos motoboys".
+
+COMO RESPONDER
+- A resposta é o `texto` da ferramenta, EXATAMENTE como veio: mesmas linhas, mesmos *asteriscos*, mesmos emojis. Não resuma, não reescreva, não junte numa linha, não acrescente cumprimento nem comentário.
+- UM entregador (mandaram o nome ou o código, ou a busca achou um só): use "Motoboy no dia" (dia vazio = hoje) e mande o `texto` dele.
+- Pergunta de uma coisa só ("que horas ele chegou?", "quantas ele fez?"): responda numa frase curta tirada do `texto`.
+- Chamou mais de uma ferramenta: mande o `texto` da que responde a pergunta (a mais específica).
+- "ele", "esse motoboy", "e a vaga dele?": é o último entregador da conversa — use o nome ou o código dele, não pergunte de novo.
+- Pediram pra mudar algo (cadastro, bloquear, tirar pedido, pagar): por aqui é só consulta. Pra falar com o motoboy ou a loja, a equipe responde pelo painel (aba Atendimento).
+- Ferramenta deu erro ou veio sem `texto` (success false, 403, 503, sem resposta): NÃO diga que não achou. Diga "A consulta não respondeu agora" e o erro em poucas palavras.
+
+TRAVA DO FINANCEIRO
+- Nunca diga valor em dinheiro: nada de R$, taxa, ganho, acerto, fatura ou Pix.
+
+SAÍDA: o `texto` como veio (o *asterisco* é o negrito do WhatsApp; não use outro markdown, nem JSON). Nunca termine com [SUPORTE]: você já está falando com o suporte."""
+nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"] = SUPORTE_TEXTO_PRONTO
+for _s, _c in conn.items():
+    if not any(d["node"] == "Agente Nina (suporte)" for out in _c.get("ai_tool", []) for d in out):
+        continue
+    _qp = nodes[_s]["parameters"].setdefault("queryParameters", {"parameters": []})["parameters"]
+    if not any(p["name"] == "formato" for p in _qp):
+        _qp.append({"name": "formato", "value": "texto"})
+
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
 texto = json.dumps(f, ensure_ascii=False)
@@ -1058,6 +1094,9 @@ for p_ in (ENTREGADOR, LOJA, GERAL):
 assert "blocoMenu" in GERAL and "$getWorkflowStaticData" in nodes["Monta contexto"]["parameters"]["jsCode"]
 assert [[d["node"] for d in o] for o in conn["Restaurante?"]["main"]] == [["Agente Nina (loja)"], ["Agente Nina"]]
 assert [d["node"] for d in conn["Backend respondeu?"]["main"][0]] == ["Chegou mensagem mais nova?"]
+for _t in tools_de("Agente Nina (suporte)"):
+    assert {"name": "formato", "value": "texto"} in nodes[_t]["parameters"]["queryParameters"]["parameters"], _t
+assert "EXATAMENTE como veio" in nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]
 assert [[d["node"] for d in o] for o in conn["Chegou mensagem mais nova?"]["main"]] == [["Junta na próxima"], [ROBO_QUEM]]
 assert [[d["node"] for d in o] for o in conn["Junta mensagens?"]["main"]] == [["Espera mais mensagens"], ["Identificar"]]
 assert [d["node"] for d in conn["Normaliza"]["main"][0]] == ["Junta mensagens?"]
