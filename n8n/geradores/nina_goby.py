@@ -674,7 +674,8 @@ SUPORTE = SUPORTE.replace(_alvo_ficha, FICHA_COMPLETA + "- Loja (um resultado): 
 # o limite da Groq (8 mil tokens/min) e a Nina ficava presa. Filtro por situação na ferramenta.
 DIA_COMPACTO = (
     "- Lista do dia: a ferramenta devolve `totais` e `linhas` (uma por motoboy, já prontas, quem tem problema primeiro). "
-    "Mande primeiro o resumo (motoboys, entregues, em aberto, vagas, chegaram, atrasados, não chegaram) e depois as linhas como vieram, uma por linha. "
+    "Mande primeiro o resumo (motoboys, entregues, em aberto, vagas, chegaram, atrasados, não chegaram) e depois TODAS as linhas que vieram, uma por linha, sem resumir nem pular. "
+    "Data: diga hoje, ontem ou DD/MM, nunca o ano. "
     "mais true: diga \"mostrando X de Y\" e ofereça filtrar por loja ou por situação.\n"
     "- Perguntaram só de quem não chegou, quem está atrasado ou \"quem tá com problema\": chame \"Dia dos motoboys\" com situacao "
     "(nao_chegou, atrasado, ou nao_chegou,atrasado) em vez de pegar a lista toda.\n"
