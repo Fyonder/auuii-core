@@ -68,7 +68,18 @@ if "msgId=" not in ident["url"]:
 nodes["Identificar"]["notes"] = "quem e + pausa + conhecimento + pendentes + corridas (uma chamada so)"
 
 # ── 3. Monta contexto (Code) ──────────────────────────────────────────────────────────
+# Dono (07/10/2026, caso um motoboy): "troquei minha vaga" virava "qual o número do pedido?".
+# Vaga/reserva não é pedido: não pergunta número, não fala de fila, passa pra equipe com resumo.
+VAGA = (
+    "VAGA, RESERVA OU TROCA DE VAGA (vale ANTES do tirar pedido): se ele fala de vaga, reserva, turno, escala ou diária "
+    "(trocou, passou, transferiu, desistiu, não vai, vai atrasar, quer outra), isso NÃO é pedido: nunca pergunte número de pedido "
+    "e não fale de fila. Você não muda reserva nem confirma troca, e não prometa nada sobre ela. Responda em uma frase, no modelo "
+    "\"Entendi, vou passar sua troca de vaga pra equipe da Goby, já te respondem por aqui.\" (troque \"troca de vaga\" pelo que for), "
+    "termine com [SUPORTE] e, na ÚLTIMA linha, escreva: RESUMO: vaga · <o que ele disse: loja, horário e com quem trocou, se disse>. "
+    "Faltou loja ou horário? Não pergunte, mande assim mesmo.\n\n"
+)
 TRIAGEM = (
+    VAGA +
     "TIRAR PEDIDO DA TELA (hoje é a equipe que faz; a ferramenta \"Retirar pedido\" está DESLIGADA, não chame). "
     "Quando ele quer largar, tirar, trocar ou cancelar um pedido dele:\n"
     "(1) se há mais de um pedido em aberto e ele não disse qual, pergunte qual pelo número;\n"
@@ -77,6 +88,7 @@ TRIAGEM = (
     "Se ele já disse pedido e motivo na própria mensagem, vá direto ao (3). Uma pergunta por vez."
 )
 LIGADA = (
+    VAGA +
     "TIRAR PEDIDO DA TELA (você pode, pela ferramenta \"Retirar pedido\"). Quando ele quer largar, tirar ou trocar um pedido dele:\n"
     "(1) se há mais de um pedido em aberto e ele não disse qual, pergunte qual pelo número;\n"
     "(2) se ainda não disse o motivo, pergunte em uma frase;\n"
@@ -1380,6 +1392,7 @@ assert [[d["node"] for d in o] for o in conn["Primeira vez?"]["main"]] == [["Pas
 assert [d["node"] for d in conn["Passa pra equipe"]["main"][0]] == ["Canal e WhatsApp?"]
 assert not {"Lembrete SIM/NÃO", "Lembra uma vez?", "Pede SIM ou NÃO"} & set(nodes)
 assert "fora_fila" in nodes["Agente Nina (entregador)"]["parameters"]["options"]["systemMessage"]
+assert nodes["Monta contexto"]["parameters"]["jsCode"].count("VAGA, RESERVA OU TROCA DE VAGA") == 2  # triagem e retirada ligada
 assert "chamarEquipe" in json.dumps(nodes["Saudação"]["parameters"], ensure_ascii=False)
 assert "rota: 'resposta'" in nodes["Robô: resposta"]["parameters"]["jsonBody"]
 assert all(nodes[_ag]["parameters"]["text"] == MENSAGEM for _ag in ("Agente Nina", "Agente Nina (entregador)", "Agente Nina (loja)", "Agente Nina (suporte)"))
