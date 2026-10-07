@@ -63,6 +63,8 @@ services:
       # Robo da Goby (sistema do socio): rota quem, perfil, fila, reservas, vagas, desempenho, ranking
       ROBO_GOBY_URL: ${ROBO_GOBY_URL:-https://emcynyuzuafovconujwo.supabase.co/functions/v1/robo-goby}
       ROBO_GOBY_KEY: ${ROBO_GOBY_KEY:-}
+      # Nina: segundos que cada mensagem espera pra juntar as seguidas (fluxo: "Espera mais mensagens")
+      NINA_ESPERA_JUNTAR: ${NINA_ESPERA_JUNTAR:-8}
       # instancia do WhatsApp e numero do suporte humano (handoff)
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-auuii}
       SUPORTE_WHATSAPP: ${SUPORTE_WHATSAPP:-}

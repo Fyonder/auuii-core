@@ -235,7 +235,30 @@ if (!['motoboy', 'restaurante', 'equipe', 'suporte'].includes(id.perfil) && id.a
   if (st?.assunto && blocoMenu) blocoMenu += ' Antes, ela tinha dito: "' + limpa(st.assunto) + '". Depois de identificar, resolva isso.';
 }}
 
-return [{{ json: {{ perfil: id.perfil || 'desconhecido', nome: id.nome || '', fonteQuem, modoRetirada: retiradaLigada ? 'ligada' : 'triagem', blocoQuem, blocoMenu, blocoPendentes, blocoCorridas, blocoRetirada, blocoFila, blocoInicio, saudacaoPronta, mensagem, soMidia, midia, juntou: seq ? seq.length : 1 }} }}];
+// ── Regra de corte (dono, 07/10/2026): disse que não entende ou se irritou DUAS vezes em
+// 30 min → a Nina chama a equipe UMA vez e para (o chamado pausa a Nina 20 min, então as
+// mensagens seguintes ficam pra equipe). Resposta fixa, sem IA. Suporte não entra.
+let chamarEquipe = false;
+let resumoCorte = '';
+const CONFUSO = /\\b(nao (entendi|entendo|to entendendo|estou entendendo|e isso|foi isso|e nada disso|ajudou|resolve|resolveu)|como assim|nada a ver|(vc|voce|ce|tu) nao (entende|ta entendendo)|ta doida|robo burro|burra|inutil|idiota|porra|caralho|pqp|merda|aff+|que saco|para de)\\b|^\\?{{2,}}$/;
+if (id.perfil !== 'suporte' && id.aguardandoHumano !== true && CONFUSO.test(norm(msg).trim())) {{
+  const CORTE_MS = 30 * 60 * 1000;
+  const agoraCorte = Date.now();
+  const est = $getWorkflowStaticData('global');
+  const cortes = est.corteNina || (est.corteNina = {{}});
+  for (const [k, v] of Object.entries(cortes)) if (!v || agoraCorte - (v.em || 0) > CORTE_MS) delete cortes[k];
+  const chaveCorte = String($('Normaliza').first().json.chatId || '');
+  const vezes = (cortes[chaveCorte]?.n || 0) + 1;
+  cortes[chaveCorte] = {{ n: vezes, em: agoraCorte }};
+  if (vezes >= 2) {{
+    delete cortes[chaveCorte];
+    chamarEquipe = true;
+    resumoCorte = 'A pessoa disse que não entendeu ou se irritou 2 vezes; a Nina parou e chamou a equipe. Última mensagem: ' + limpa(msg).slice(0, 200);
+    saudacaoPronta = 'Desculpa a confusão. Vou passar sua conversa pra equipe da Goby, já te respondem por aqui.';
+  }}
+}}
+
+return [{{ json: {{ perfil: id.perfil || 'desconhecido', nome: id.nome || '', fonteQuem, modoRetirada: retiradaLigada ? 'ligada' : 'triagem', blocoQuem, blocoMenu, blocoPendentes, blocoCorridas, blocoRetirada, blocoFila, blocoInicio, saudacaoPronta, mensagem, soMidia, midia, juntou: seq ? seq.length : 1, chamarEquipe, resumoCorte }} }}];
 """
 add_node({
     "parameters": {"jsCode": JS_CONTEXTO},
@@ -1211,45 +1234,57 @@ conn["Equipe: números"] = {"main": [[{"node": "Números do suporte", "type": "m
 # período a Nina não entra: lembra UMA vez "responde só SIM ou NÃO" e depois fica em
 # silêncio (a mensagem fica na aba Atendimento). Quando o robô fecha a pergunta (SIM, NÃO ou
 # a reserva começou), `temPergunta` cai e a Nina volta ao normal.
-LEMBRETE_SIM_NAO = "Recebi 👍 Pra eu registrar sua reserva, me responde só *SIM* ou *NÃO*."
-JS_LEMBRETE = r"""// Lembra uma vez só por pergunta aberta (3 h): depois, silêncio até o robô fechar.
+# Dono (07/10/2026, à noite, mudou a regra): resposta que não é SIM/NÃO com a pergunta aberta → a Nina
+# não inventa: diz que vai passar pra equipe e abre UM chamado com o resumo (o mesmo caminho
+# da resposta normal: Canal e WhatsApp? → envia → Precisa de humano? → registra e avisa). O
+# chamado pausa a Nina 20 min; as mensagens seguintes com a pergunta ainda aberta ficam em
+# silêncio pra equipe (uma vez por pergunta, 3 h). Se o robô devolver `pergunta`, `loja` e
+# `horario`, vão no resumo (pedido ao sócio).
+CHAMA_EQUIPE_SIM_NAO = "Recebi 👍 Essa eu vou passar pra equipe da Goby, já te respondem por aqui."
+JS_CHAMADO_SIM_NAO = r"""// Um chamado por pergunta aberta (3 h por número): depois, silêncio até o robô fechar.
 const r = $('Robô: resposta').first().json || {};
 const chat = String($('Normaliza').first().json.chatId || '').replace(/\D/g, '');
 const st = $getWorkflowStaticData('global');
-const lembrados = st.lembreteSimNao || (st.lembreteSimNao = {});
+const chamados = st.chamadoSimNao || (st.chamadoSimNao = {});
 const agora = Date.now();
-for (const [k, em] of Object.entries(lembrados)) if (agora - em > 3 * 3600 * 1000) delete lembrados[k];
-const lembrar = !!chat && !lembrados[chat];
-if (lembrar) lembrados[chat] = agora;
-return [{ json: { lembrar, chatId: chat, temPergunta: r.temPergunta === true } }];
+for (const [k, em] of Object.entries(chamados)) if (agora - em > 3 * 3600 * 1000) delete chamados[k];
+const chamar = !!chat && !chamados[chat];
+if (chamar) chamados[chat] = agora;
+const doAviso = [r.pergunta, r.loja, r.horario].filter((x) => x && String(x).trim()).join(' · ');
+const texto = String($('Normaliza').first().json.message || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+const resumo = 'Respondeu ao aviso do robô' + (doAviso ? ' (' + doAviso + ')' : ' (vai na reserva? SIM ou NÃO)') + ' com algo que não é SIM/NÃO: "' + texto + '"';
+return [{ json: { chamar, chatId: chat, resumo } }];
 """
+# Os nós do lembrete (f465e0b) saem: o gerador parte do próprio JSON.
+for _velho in ("Lembrete SIM/NÃO", "Lembra uma vez?", "Pede SIM ou NÃO"):
+    if _velho in nodes:
+        f["nodes"] = [x for x in f["nodes"] if x["name"] != _velho]
+        del nodes[_velho]
+    conn.pop(_velho, None)
 rx, ry = nodes["Robô tratou?"]["position"]
 add_node(_if("Espera SIM/NÃO?", "$json.ok === true && $json.tratado !== true && $json.temPergunta === true", [rx + 180, ry - 120]))
 add_node({
-    "parameters": {"jsCode": JS_LEMBRETE},
-    "name": "Lembrete SIM/NÃO", "type": "n8n-nodes-base.code", "typeVersion": 2,
-    "position": [rx + 360, ry - 220], "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Lembrete SIM/NÃO")),
-    "notesInFlow": True, "notes": "uma vez por pergunta aberta; depois silêncio",
+    "parameters": {"jsCode": JS_CHAMADO_SIM_NAO},
+    "name": "Chamado SIM/NÃO", "type": "n8n-nodes-base.code", "typeVersion": 2,
+    "position": [rx + 360, ry - 220], "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Chamado SIM/NÃO")),
+    "notesInFlow": True, "notes": "um chamado por pergunta aberta; depois silêncio",
 })
-add_node(_if("Lembra uma vez?", "$json.lembrar === true", [rx + 540, ry - 220]))
+add_node(_if("Primeira vez?", "$json.chamar === true", [rx + 540, ry - 220]))
 add_node({
-    "parameters": {
-        "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Normaliza').first().json.instancia || 'goby' }}",
-        "sendHeaders": True,
-        "headerParameters": {"parameters": [
-            {"name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}"},
-            {"name": "Content-Type", "value": "application/json"},
-        ]},
-        "sendBody": True,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ number: $json.chatId, text: " + json.dumps(LEMBRETE_SIM_NAO, ensure_ascii=False) + " }) }}",
-        "options": {},
-    },
-    "name": "Pede SIM ou NÃO", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
-    "position": [rx + 720, ry - 300], "onError": "continueRegularOutput",
-    "notesInFlow": True, "notes": "texto fixo, sem IA",
-    "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Pede SIM ou NÃO")),
+    "parameters": {"assignments": {"assignments": [
+        {"id": "pe1", "name": "perfil", "type": "string", "value": "=motoboy"},
+        {"id": "pe2", "name": "chatId", "type": "string", "value": "={{ $('Normaliza').first().json.chatId }}"},
+        {"id": "pe3", "name": "canal", "type": "string", "value": "={{ $('Normaliza').first().json.canal }}"},
+        {"id": "pe4", "name": "instancia", "type": "string", "value": "={{ $('Normaliza').first().json.instancia }}"},
+        {"id": "pe5", "name": "pergunta", "type": "string", "value": "={{ $('Normaliza').first().json.message }}"},
+        {"id": "pe6", "name": "reply", "type": "string", "value": "=" + CHAMA_EQUIPE_SIM_NAO},
+        {"id": "pe7", "name": "handoff", "type": "boolean", "value": "={{ true }}"},
+        {"id": "pe8", "name": "nome", "type": "string", "value": "={{ $('Normaliza').first().json.nome }}"},
+        {"id": "pe9", "name": "resumo", "type": "string", "value": "={{ $('Chamado SIM/NÃO').first().json.resumo }}"},
+    ]}, "options": {}},
+    "name": "Passa pra equipe", "type": "n8n-nodes-base.set", "typeVersion": 3.4,
+    "position": [rx + 720, ry - 300], "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Passa pra equipe")),
+    "notesInFlow": True, "notes": "texto fixo + chamado com resumo, sem IA",
 })
 add_node({
     "parameters": {"assignments": {"assignments": [
@@ -1260,11 +1295,37 @@ add_node({
     "position": [rx + 720, ry - 140], "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Esperando SIM/NÃO")),
 })
 conn["Robô tratou?"]["main"][1] = [{"node": "Espera SIM/NÃO?", "type": "main", "index": 0}]
-conn["Espera SIM/NÃO?"] = {"main": [[{"node": "Lembrete SIM/NÃO", "type": "main", "index": 0}],
+conn["Espera SIM/NÃO?"] = {"main": [[{"node": "Chamado SIM/NÃO", "type": "main", "index": 0}],
                                     [{"node": "Junta mensagens?", "type": "main", "index": 0}]]}
-conn["Lembrete SIM/NÃO"] = {"main": [[{"node": "Lembra uma vez?", "type": "main", "index": 0}]]}
-conn["Lembra uma vez?"] = {"main": [[{"node": "Pede SIM ou NÃO", "type": "main", "index": 0}],
-                                    [{"node": "Esperando SIM/NÃO", "type": "main", "index": 0}]]}
+conn["Chamado SIM/NÃO"] = {"main": [[{"node": "Primeira vez?", "type": "main", "index": 0}]]}
+conn["Primeira vez?"] = {"main": [[{"node": "Passa pra equipe", "type": "main", "index": 0}],
+                                  [{"node": "Esperando SIM/NÃO", "type": "main", "index": 0}]]}
+conn["Passa pra equipe"] = {"main": [[{"node": "Canal e WhatsApp?", "type": "main", "index": 0}]]}
+
+# Esse caminho chega no envio sem passar pelo Identificar: o "Pausada" (humano atendendo) não
+# pode depender dele.
+for _a in nodes["Pausada (humano atendendo)"]["parameters"]["assignments"]["assignments"]:
+    if _a["name"] == "motivo" and "isExecuted" not in _a["value"]:
+        _a["value"] = ("=IA pausada: humano atendendo{{ $('Identificar').isExecuted && $('Identificar').first().json.ia?.ate"
+                       " ? ' ate ' + new Date($('Identificar').first().json.ia.ate).toISOString() : ' (ate retomar)' }}")
+
+# ── 18. Fila fora_fila e regra de corte (dono, 07/10/2026) ──────────────────────────────
+# fora_fila (ele não está na fila, mas ela roda) não é "fila fechada": isso é só sem_ciclo.
+_ent = nodes["Agente Nina (entregador)"]["parameters"]["options"]["systemMessage"]
+_alvo_fila = "- Fila com estado sem_ciclo:"
+assert _ent.count(_alvo_fila) == 1, "prompt do entregador mudou: ajuste a etapa 18"
+if "fora_fila" not in _ent:
+    nodes["Agente Nina (entregador)"]["parameters"]["options"]["systemMessage"] = _ent.replace(_alvo_fila,
+        "- Fila com estado fora_fila (a fila está rodando, mas ele não está nela): diga \"Você não está na fila agora.\" e, "
+        "se vier quem está na vez, \"Quem está na vez é <primeiro nome>.\" NUNCA diga que a fila está fechada: fechada é só sem_ciclo.\n"
+        + _alvo_fila)
+# Regra de corte: o Monta contexto marca chamarEquipe (2x "não entendi"/irritação em 30 min) e
+# a resposta fixa sai pela Saudação, já como chamado.
+for _a in nodes["Saudação"]["parameters"]["assignments"]["assignments"]:
+    if _a["name"] == "handoff":
+        _a["value"] = "={{ $('Monta contexto').first().json.chamarEquipe === true }}"
+    if _a["name"] == "resumo":
+        _a["value"] = "={{ $('Monta contexto').first().json.resumoCorte || '' }}"
 
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
@@ -1313,8 +1374,12 @@ assert [d["node"] for d in conn["Equipe: números"]["main"][0]] == ["Números do
 assert "idBackend.suporte === true" in nodes["Monta contexto"]["parameters"]["jsCode"]
 assert [[d["node"] for d in o] for o in conn["Pergunta ao robô?"]["main"]] == [["Robô: resposta"], ["Junta mensagens?"]]
 assert [[d["node"] for d in o] for o in conn["Robô tratou?"]["main"]] == [["Responde pelo robô"], ["Espera SIM/NÃO?"]]
-assert [[d["node"] for d in o] for o in conn["Espera SIM/NÃO?"]["main"]] == [["Lembrete SIM/NÃO"], ["Junta mensagens?"]]
-assert [[d["node"] for d in o] for o in conn["Lembra uma vez?"]["main"]] == [["Pede SIM ou NÃO"], ["Esperando SIM/NÃO"]]
+assert [[d["node"] for d in o] for o in conn["Espera SIM/NÃO?"]["main"]] == [["Chamado SIM/NÃO"], ["Junta mensagens?"]]
+assert [[d["node"] for d in o] for o in conn["Primeira vez?"]["main"]] == [["Passa pra equipe"], ["Esperando SIM/NÃO"]]
+assert [d["node"] for d in conn["Passa pra equipe"]["main"][0]] == ["Canal e WhatsApp?"]
+assert not {"Lembrete SIM/NÃO", "Lembra uma vez?", "Pede SIM ou NÃO"} & set(nodes)
+assert "fora_fila" in nodes["Agente Nina (entregador)"]["parameters"]["options"]["systemMessage"]
+assert "chamarEquipe" in json.dumps(nodes["Saudação"]["parameters"], ensure_ascii=False)
 assert "rota: 'resposta'" in nodes["Robô: resposta"]["parameters"]["jsonBody"]
 assert all(nodes[_ag]["parameters"]["text"] == MENSAGEM for _ag in ("Agente Nina", "Agente Nina (entregador)", "Agente Nina (loja)", "Agente Nina (suporte)"))
 assert [d["node"] for d in conn[ROBO_QUEM]["main"][0]] == ["Monta contexto"]
