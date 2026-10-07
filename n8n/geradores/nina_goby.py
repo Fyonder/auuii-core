@@ -752,7 +752,7 @@ for _n in EXTRAS_SUPORTE:
 _dia = nodes["Dia dos motoboys"]["parameters"]
 _qs = _dia["queryParameters"]["parameters"]
 if not any(q["name"] == "situacao" for q in _qs):
-    _qs.append({"name": "situacao", "value": "={{ $fromAI('situacao', 'vazio para todos; ou nao_chegou, atrasado, ainda_nao_comecou, trabalhando, chegou (separe por virgula)', 'string') }}"})
+    _qs.append({"name": "situacao", "value": "={{ $fromAI('situacao', 'vazio para todos; ou nao_chegou, atrasado, ainda_nao_comecou, trabalhando, chegou, transferiu (separe por virgula)', 'string') }}"})
 _dia["toolDescription"] = (
     "O dia de TODOS os entregadores da Goby: totais do dia e uma linha pronta por motoboy (nome, codigo, entregues, em aberto, "
     "vagas com loja, horario e situacao: chegou, trabalhando, ATRASADO, NAO CHEGOU, comeca em X min), quem tem problema primeiro. "
@@ -1034,7 +1034,7 @@ FERRAMENTAS (todas devolvem `texto`: a resposta pronta)
 - "Motoboy no dia" (código ou nome; dia): um entregador — vagas com horário e chegada, pedidos do dia, corridas em aberto. Use pra "o Fulano tá com vaga hoje?", "que horas ele chegou?", "quantas ele fez ontem?".
 - "Corridas do entregador" (código ou nome): as corridas em aberto dele com os endereços.
 - "Buscar pedido" (número): qualquer pedido, com entregador, etapa, endereços e horários.
-- "Dia dos motoboys" (dia; loja e situacao opcionais): todos os entregadores do dia — quem não veio, quem está atrasado, quem está na vaga, pedidos de cada um. Use pra "como tá hoje", "quem não chegou" (situacao=nao_chegou), "quem tá atrasado" (situacao=atrasado), "quem tá com problema" (situacao=nao_chegou,atrasado), "quem tá na Holandesa" (loja).
+- "Dia dos motoboys" (dia; loja e situacao opcionais): todos os entregadores do dia — quem não veio, quem está atrasado, quem está na vaga, pedidos de cada um. Use pra "como tá hoje", "quem não chegou" (situacao=nao_chegou), "quem tá atrasado" (situacao=atrasado), "quem tá com problema" (situacao=nao_chegou,atrasado), "quem transferiu a vaga" (situacao=transferiu), "quem tá na Holandesa" (loja). Quem transferiu a vaga não faltou: a ficha diz "Transferiu pra Fulano".
 - "Vagas do dia" (dia; loja, periodo, livres, nomes opcionais): as vagas do dia, livres e ocupadas. "sobrando"/"livre": livres=sim. "agora"/"as que faltam": periodo=agora. manhã, almoço, tarde, noite: periodo. Quem está nas vagas: loja ou periodo (os nomes vêm junto) ou nomes=sim. Vaga livre é aqui; quem chegou, atrasou ou faltou é "Dia dos motoboys".
 
 COMO RESPONDER
