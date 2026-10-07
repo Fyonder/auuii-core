@@ -66,16 +66,51 @@
     },
     {
       "parameters": {
-        "jsCode": "// Robô da Goby (rota avisos) → um item por aviso. Cada aviso vem UMA vez só: nada é\n// descartado aqui. Sem telefone ou sem texto, o envio falha e o robô fica sabendo pelo\n// aviso_resultado. Sem id não dá pra confirmar: esse fica de fora.\nconst r = $input.first().json || {};\nif (r.ok !== true || !Array.isArray(r.avisos)) return [];\nreturn r.avisos\n  .filter((a) => a && a.id)\n  .map((a) => ({ json: {\n    id: String(a.id),\n    telefone: String(a.telefone || '').replace(/\\D/g, ''),\n    mensagem: String(a.mensagem || ''),\n    tipo: String(a.tipo || ''),\n  } }));\n"
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "tem1",
+              "leftValue": "={{ $json.ok === true && Array.isArray($json.avisos) && $json.avisos.length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "name": "Separa avisos",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "name": "Tem aviso?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
       "position": [
         440,
         0
       ],
       "id": "a7150b0b-0000-4a00-9000-000000000003"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "avisos",
+        "options": {}
+      },
+      "name": "Um item por aviso",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        660,
+        -20
+      ],
+      "id": "a7150b0b-0000-4a00-9000-000000000004"
     },
     {
       "parameters": {
@@ -96,7 +131,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ number: $json.telefone, text: $json.mensagem }) }}",
+        "jsonBody": "={{ JSON.stringify({ number: String($json.telefone || '').replace(/\\D/g, ''), text: String($json.mensagem || '') }) }}",
         "options": {
           "timeout": 20000,
           "batching": {
@@ -117,26 +152,13 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1100,
-        120
+        880,
+        -20
       ],
       "onError": "continueRegularOutput",
       "notesInFlow": true,
       "notes": "um por vez, 3 s entre eles; texto como veio",
       "id": "a7150b0b-0000-4a00-9000-000000000006"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Respostas da Evolution → o que o robô precisa saber (aviso_resultado), um por aviso.\n// O envio sai na mesma ordem dos avisos: o item i daqui é o aviso i do Separa avisos.\nconst avisos = $('Separa avisos').all();\nreturn $input.all().map((it, i) => {\n  const aviso = (avisos[i] || {}).json || {};\n  const r = it.json || {};\n  const status = Number(r.statusCode || 0);\n  const ok = status >= 200 && status < 300 && !r.error;\n  if (ok) return { json: { rota: 'aviso_resultado', id: aviso.id, ok: true } };\n  const b = r.body || {};\n  const msg = r.error?.message || r.error || b.response?.message || b.message || b.error;\n  let erro = (typeof msg === 'string' ? msg : JSON.stringify(msg || '')) || ('HTTP ' + status);\n  if (!aviso.telefone) erro = 'aviso sem telefone';\n  else if (!String(aviso.mensagem || '').trim()) erro = 'aviso sem mensagem';\n  return { json: { rota: 'aviso_resultado', id: aviso.id, ok: false, erro: String(erro).slice(0, 300) } };\n});\n"
-      },
-      "name": "Resultado do envio",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1320,
-        120
-      ],
-      "id": "a7150b0b-0000-4a00-9000-000000000007"
     },
     {
       "parameters": {
@@ -153,7 +175,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json) }}",
+        "jsonBody": "={{ JSON.stringify((Number($json.statusCode) >= 200 && Number($json.statusCode) < 300 && !$json.error) ? { rota: 'aviso_resultado', id: $('Um item por aviso').all()[$itemIndex].json.id, ok: true } : { rota: 'aviso_resultado', id: $('Um item por aviso').all()[$itemIndex].json.id, ok: false, erro: (() => { const b = $json.body || {}; const m = $json.error?.message || $json.error || b.response?.message || b.message || b.error; const a = $('Um item por aviso').all()[$itemIndex].json; if (!String(a.telefone || '').replace(/\\D/g, '')) return 'aviso sem telefone'; if (!String(a.mensagem || '').trim()) return 'aviso sem mensagem'; return String(typeof m === 'string' ? m : JSON.stringify(m || '') || ('HTTP ' + $json.statusCode)).slice(0, 300); })() }) }}",
         "options": {
           "timeout": 10000,
           "response": {
@@ -167,8 +189,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1540,
-        120
+        1100,
+        -20
       ],
       "onError": "continueRegularOutput",
       "notesInFlow": true,
@@ -192,14 +214,26 @@
       "main": [
         [
           {
-            "node": "Separa avisos",
+            "node": "Tem aviso?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Separa avisos": {
+    "Tem aviso?": {
+      "main": [
+        [
+          {
+            "node": "Um item por aviso",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Um item por aviso": {
       "main": [
         [
           {
@@ -214,17 +248,6 @@
       "main": [
         [
           {
-            "node": "Resultado do envio",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Resultado do envio": {
-      "main": [
-        [
-          {
             "node": "Robô: confirma",
             "type": "main",
             "index": 0
@@ -236,7 +259,8 @@
   "settings": {
     "executionOrder": "v1",
     "saveDataSuccessExecution": "none",
-    "saveDataErrorExecution": "all"
+    "saveDataErrorExecution": "all",
+    "saveExecutionProgress": true
   },
   "pinData": {}
 }
