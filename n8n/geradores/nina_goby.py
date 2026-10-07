@@ -240,7 +240,8 @@ if (!['motoboy', 'restaurante', 'equipe', 'suporte'].includes(id.perfil) && id.a
 // mensagens seguintes ficam pra equipe). Resposta fixa, sem IA. Suporte não entra.
 let chamarEquipe = false;
 let resumoCorte = '';
-const CONFUSO = /\\b(nao (entendi|entendo|to entendendo|estou entendendo|e isso|foi isso|e nada disso|ajudou|resolve|resolveu)|como assim|nada a ver|(vc|voce|ce|tu) nao (entende|ta entendendo)|ta doida|robo burro|burra|inutil|idiota|porra|caralho|pqp|merda|aff+|que saco|para de)\\b|^\\?{{2,}}$/;
+// "intendendo", "tô", "tou": do jeito que escrevem (caso um motoboy, 07/10 17:39).
+const CONFUSO = /\\b(n(ao|um|) ((to|tou|estou|t|ta) )?[ei]ntend\\w*|nao (e isso|foi isso|e nada disso|ajudou|resolve|resolveu)|como assim|nada a ver|(vc|voce|ce|tu) nao (entende|ta entendendo)|ta doida|robo burro|burra|inutil|idiota|porra|caralho|pqp|merda|aff+|que saco|para de)\\b|^\\?{{2,}}$/;
 if (id.perfil !== 'suporte' && id.aguardandoHumano !== true && CONFUSO.test(norm(msg).trim())) {{
   const CORTE_MS = 30 * 60 * 1000;
   const agoraCorte = Date.now();
