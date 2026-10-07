@@ -21,9 +21,9 @@ Fluxo (a cada 1 minuto, porque aviso não buscado em poucos minutos é descartad
   4. POST <robô> { rota: "aviso_resultado", id, ok: true } ou { ..., ok: false, erro }.
 Todas as chamadas ao robô levam o cabeçalho x-api-key (ROBO_GOBY_KEY). 401 = chave errada.
 
-Sem nó de código (07/10, 16:32): as rodadas ficavam "em andamento" para sempre, e o log do n8n
-mostrava o executor de código recusando tarefa ("Offer expired"). Split Out, IF e expressões não
-passam pelo executor. Também sem loop (splitInBatches), que travava sem aviso.
+Sem nó de código e sem loop (splitInBatches, que travava sem aviso): Split Out, IF e expressões.
+As rodadas que ficavam "em andamento" eram registro que o n8n não apagava com
+saveDataSuccessExecution "none" (o fluxo tinha terminado); agora as rodadas são guardadas.
 
 Substitui o goby_vez_na_fila.py (que esperava uma rota "vez" que o sócio não criou).
 
@@ -171,10 +171,11 @@ def montar():
         "name": "Goby: avisos do robô (fila e reservas)",
         "nodes": nodes,
         "connections": conn,
-        # Roda de minuto em minuto: execução sem aviso não fica guardada. O progresso fica
-        # gravado pra, se travar de novo, dar pra ver em que nó parou.
-        "settings": {"executionOrder": "v1", "saveDataSuccessExecution": "none", "saveDataErrorExecution": "all",
-                     "saveExecutionProgress": True},
+        # Guarda as rodadas (o n8n apaga sozinho depois de 14 dias). Com "none", o n8n 2.39
+        # deixava cada rodada marcada "em andamento" pra sempre (o registro não era apagado) e
+        # isso nunca era limpo: ~1.400 por dia (visto em 07/10).
+        "settings": {"executionOrder": "v1", "saveDataSuccessExecution": "all", "saveDataErrorExecution": "all",
+                     "saveExecutionProgress": False},
         "pinData": {},
     }
 

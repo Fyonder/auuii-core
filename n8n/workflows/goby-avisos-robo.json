@@ -258,9 +258,9 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "saveDataSuccessExecution": "none",
+    "saveDataSuccessExecution": "all",
     "saveDataErrorExecution": "all",
-    "saveExecutionProgress": true
+    "saveExecutionProgress": false
   },
   "pinData": {}
 }
