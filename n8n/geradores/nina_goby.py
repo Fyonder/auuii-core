@@ -1202,6 +1202,70 @@ return saida;
 conn["Suporte configurado?"]["main"][0] = [{"node": "Equipe: números", "type": "main", "index": 0}]
 conn["Equipe: números"] = {"main": [[{"node": "Números do suporte", "type": "main", "index": 0}]]}
 
+# ── 17. Pergunta do robô pendente: a Nina espera o SIM/NÃO (dono, 07/10/2026) ──────────
+# Visto 17:36-17:40: o aviso "vai na reserva? SIM ou NÃO" saiu, um motoboy respondeu "Troquei
+# com o fulano", o robô não tratou (não era SIM/NÃO) e a Nina, sem saber do aviso, entendeu
+# "troca de pedido", inventou que a fila estava fechada e mandou 7 respostas em 3 min. Dono:
+# "tem que esperar o motoboy mandar mensagem até as 18:00 se vai ou não no agendamento".
+# Agora: o robô responde `temPergunta: true` enquanto a pergunta dele está aberta. Nesse
+# período a Nina não entra: lembra UMA vez "responde só SIM ou NÃO" e depois fica em
+# silêncio (a mensagem fica na aba Atendimento). Quando o robô fecha a pergunta (SIM, NÃO ou
+# a reserva começou), `temPergunta` cai e a Nina volta ao normal.
+LEMBRETE_SIM_NAO = "Recebi 👍 Pra eu registrar sua reserva, me responde só *SIM* ou *NÃO*."
+JS_LEMBRETE = r"""// Lembra uma vez só por pergunta aberta (3 h): depois, silêncio até o robô fechar.
+const r = $('Robô: resposta').first().json || {};
+const chat = String($('Normaliza').first().json.chatId || '').replace(/\D/g, '');
+const st = $getWorkflowStaticData('global');
+const lembrados = st.lembreteSimNao || (st.lembreteSimNao = {});
+const agora = Date.now();
+for (const [k, em] of Object.entries(lembrados)) if (agora - em > 3 * 3600 * 1000) delete lembrados[k];
+const lembrar = !!chat && !lembrados[chat];
+if (lembrar) lembrados[chat] = agora;
+return [{ json: { lembrar, chatId: chat, temPergunta: r.temPergunta === true } }];
+"""
+rx, ry = nodes["Robô tratou?"]["position"]
+add_node(_if("Espera SIM/NÃO?", "$json.ok === true && $json.tratado !== true && $json.temPergunta === true", [rx + 180, ry - 120]))
+add_node({
+    "parameters": {"jsCode": JS_LEMBRETE},
+    "name": "Lembrete SIM/NÃO", "type": "n8n-nodes-base.code", "typeVersion": 2,
+    "position": [rx + 360, ry - 220], "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Lembrete SIM/NÃO")),
+    "notesInFlow": True, "notes": "uma vez por pergunta aberta; depois silêncio",
+})
+add_node(_if("Lembra uma vez?", "$json.lembrar === true", [rx + 540, ry - 220]))
+add_node({
+    "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Normaliza').first().json.instancia || 'goby' }}",
+        "sendHeaders": True,
+        "headerParameters": {"parameters": [
+            {"name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}"},
+            {"name": "Content-Type", "value": "application/json"},
+        ]},
+        "sendBody": True,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $json.chatId, text: " + json.dumps(LEMBRETE_SIM_NAO, ensure_ascii=False) + " }) }}",
+        "options": {},
+    },
+    "name": "Pede SIM ou NÃO", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
+    "position": [rx + 720, ry - 300], "onError": "continueRegularOutput",
+    "notesInFlow": True, "notes": "texto fixo, sem IA",
+    "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Pede SIM ou NÃO")),
+})
+add_node({
+    "parameters": {"assignments": {"assignments": [
+        {"id": "es1", "name": "ignorado", "type": "boolean", "value": "={{ true }}"},
+        {"id": "es2", "name": "motivo", "type": "string", "value": "=esperando o SIM/NÃO da reserva (pergunta do robô aberta)"},
+    ]}, "options": {}},
+    "name": "Esperando SIM/NÃO", "type": "n8n-nodes-base.set", "typeVersion": 3.4,
+    "position": [rx + 720, ry - 140], "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Esperando SIM/NÃO")),
+})
+conn["Robô tratou?"]["main"][1] = [{"node": "Espera SIM/NÃO?", "type": "main", "index": 0}]
+conn["Espera SIM/NÃO?"] = {"main": [[{"node": "Lembrete SIM/NÃO", "type": "main", "index": 0}],
+                                    [{"node": "Junta mensagens?", "type": "main", "index": 0}]]}
+conn["Lembrete SIM/NÃO"] = {"main": [[{"node": "Lembra uma vez?", "type": "main", "index": 0}]]}
+conn["Lembra uma vez?"] = {"main": [[{"node": "Pede SIM ou NÃO", "type": "main", "index": 0}],
+                                    [{"node": "Esperando SIM/NÃO", "type": "main", "index": 0}]]}
+
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
 texto = json.dumps(f, ensure_ascii=False)
@@ -1248,7 +1312,9 @@ assert [d["node"] for d in conn["Suporte configurado?"]["main"][0]] == ["Equipe:
 assert [d["node"] for d in conn["Equipe: números"]["main"][0]] == ["Números do suporte"]
 assert "idBackend.suporte === true" in nodes["Monta contexto"]["parameters"]["jsCode"]
 assert [[d["node"] for d in o] for o in conn["Pergunta ao robô?"]["main"]] == [["Robô: resposta"], ["Junta mensagens?"]]
-assert [[d["node"] for d in o] for o in conn["Robô tratou?"]["main"]] == [["Responde pelo robô"], ["Junta mensagens?"]]
+assert [[d["node"] for d in o] for o in conn["Robô tratou?"]["main"]] == [["Responde pelo robô"], ["Espera SIM/NÃO?"]]
+assert [[d["node"] for d in o] for o in conn["Espera SIM/NÃO?"]["main"]] == [["Lembrete SIM/NÃO"], ["Junta mensagens?"]]
+assert [[d["node"] for d in o] for o in conn["Lembra uma vez?"]["main"]] == [["Pede SIM ou NÃO"], ["Esperando SIM/NÃO"]]
 assert "rota: 'resposta'" in nodes["Robô: resposta"]["parameters"]["jsonBody"]
 assert all(nodes[_ag]["parameters"]["text"] == MENSAGEM for _ag in ("Agente Nina", "Agente Nina (entregador)", "Agente Nina (loja)", "Agente Nina (suporte)"))
 assert [d["node"] for d in conn[ROBO_QUEM]["main"][0]] == ["Monta contexto"]

@@ -2600,6 +2600,152 @@
       "notesInFlow": true,
       "notes": "equipe do robô da Goby + SUPORTE_WHATSAPP do Render",
       "id": "4ca1fcfb-211c-55db-81dd-d085ece8cb17"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Espera SIM/NÃO?",
+              "leftValue": "={{ $json.ok === true && $json.tratado !== true && $json.temPergunta === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Espera SIM/NÃO?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -4812,
+        -784
+      ],
+      "id": "7741426b-515b-5de4-9e7c-8069e6b47898"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lembra uma vez só por pergunta aberta (3 h): depois, silêncio até o robô fechar.\nconst r = $('Robô: resposta').first().json || {};\nconst chat = String($('Normaliza').first().json.chatId || '').replace(/\\D/g, '');\nconst st = $getWorkflowStaticData('global');\nconst lembrados = st.lembreteSimNao || (st.lembreteSimNao = {});\nconst agora = Date.now();\nfor (const [k, em] of Object.entries(lembrados)) if (agora - em > 3 * 3600 * 1000) delete lembrados[k];\nconst lembrar = !!chat && !lembrados[chat];\nif (lembrar) lembrados[chat] = agora;\nreturn [{ json: { lembrar, chatId: chat, temPergunta: r.temPergunta === true } }];\n"
+      },
+      "name": "Lembrete SIM/NÃO",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4632,
+        -884
+      ],
+      "id": "e6a27ae8-4ef7-534e-88f5-4a5d443e1aea",
+      "notesInFlow": true,
+      "notes": "uma vez por pergunta aberta; depois silêncio"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Lembra uma vez?",
+              "leftValue": "={{ $json.lembrar === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Lembra uma vez?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -4452,
+        -884
+      ],
+      "id": "3cd1868f-9f29-5922-9a0b-2d17da4e8dc3"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Normaliza').first().json.instancia || 'goby' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $json.chatId, text: \"Recebi 👍 Pra eu registrar sua reserva, me responde só *SIM* ou *NÃO*.\" }) }}",
+        "options": {}
+      },
+      "name": "Pede SIM ou NÃO",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -4272,
+        -964
+      ],
+      "onError": "continueRegularOutput",
+      "notesInFlow": true,
+      "notes": "texto fixo, sem IA",
+      "id": "fb237b41-1d51-5a31-869e-f03eceea38a1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "es1",
+              "name": "ignorado",
+              "type": "boolean",
+              "value": "={{ true }}"
+            },
+            {
+              "id": "es2",
+              "name": "motivo",
+              "type": "string",
+              "value": "=esperando o SIM/NÃO da reserva (pergunta do robô aberta)"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Esperando SIM/NÃO",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -4272,
+        -804
+      ],
+      "id": "308b3ddc-2dd8-5153-8b57-13912d68fd68"
     }
   ],
   "connections": {
@@ -3490,7 +3636,7 @@
         ],
         [
           {
-            "node": "Junta mensagens?",
+            "node": "Espera SIM/NÃO?",
             "type": "main",
             "index": 0
           }
@@ -3502,6 +3648,53 @@
         [
           {
             "node": "Números do suporte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Espera SIM/NÃO?": {
+      "main": [
+        [
+          {
+            "node": "Lembrete SIM/NÃO",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Junta mensagens?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lembrete SIM/NÃO": {
+      "main": [
+        [
+          {
+            "node": "Lembra uma vez?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lembra uma vez?": {
+      "main": [
+        [
+          {
+            "node": "Pede SIM ou NÃO",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Esperando SIM/NÃO",
             "type": "main",
             "index": 0
           }
