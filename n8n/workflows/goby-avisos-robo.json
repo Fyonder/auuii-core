@@ -1,0 +1,300 @@
+{
+  "id": "gobyAvisosRobo01",
+  "name": "Goby: avisos do robô (fila e reservas)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "name": "A cada minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "a7150b0b-0000-4a00-9000-000000000001"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.ROBO_GOBY_URL || 'https://emcynyuzuafovconujwo.supabase.co/functions/v1/robo-goby' }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "rota",
+              "value": "avisos"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ROBO_GOBY_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Robô: avisos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "notesInFlow": true,
+      "notes": "cada aviso vem uma vez só",
+      "id": "a7150b0b-0000-4a00-9000-000000000002"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Robô da Goby (rota avisos) → um item por aviso. Cada aviso vem UMA vez só: nada é\n// descartado aqui. Sem telefone ou sem texto, o envio falha e o robô fica sabendo pelo\n// aviso_resultado. Sem id não dá pra confirmar: esse fica de fora.\nconst r = $input.first().json || {};\nif (r.ok !== true || !Array.isArray(r.avisos)) return [];\nreturn r.avisos\n  .filter((a) => a && a.id)\n  .map((a) => ({ json: {\n    id: String(a.id),\n    telefone: String(a.telefone || '').replace(/\\D/g, ''),\n    mensagem: String(a.mensagem || ''),\n    tipo: String(a.tipo || ''),\n  } }));\n"
+      },
+      "name": "Separa avisos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "a7150b0b-0000-4a00-9000-000000000003"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "name": "Um por vez",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        660,
+        0
+      ],
+      "id": "a7150b0b-0000-4a00-9000-000000000004"
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "name": "Espera 3 s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        120
+      ],
+      "webhookId": "a7150b0b-0000-4a00-9000-0000000000w1",
+      "notesInFlow": true,
+      "notes": "sem rajada (o WhatsApp bloqueia)",
+      "id": "a7150b0b-0000-4a00-9000-000000000005"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/goby",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $('Um por vez').first().json.telefone, text: $('Um por vez').first().json.mensagem }) }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "name": "Manda no WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        120
+      ],
+      "onError": "continueRegularOutput",
+      "notesInFlow": true,
+      "notes": "número da Goby (instância goby); texto como veio",
+      "id": "a7150b0b-0000-4a00-9000-000000000006"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Resposta da Evolution → o que o robô precisa saber (aviso_resultado).\nconst aviso = $('Um por vez').first().json;\nconst r = $input.first().json || {};\nconst status = Number(r.statusCode || 0);\nconst ok = status >= 200 && status < 300 && !r.error;\nlet erro = '';\nif (!ok) {\n  const b = r.body || {};\n  const msg = r.error?.message || r.error || b.response?.message || b.message || b.error;\n  erro = (typeof msg === 'string' ? msg : JSON.stringify(msg || '')) || ('HTTP ' + status);\n  if (!aviso.telefone) erro = 'aviso sem telefone';\n  else if (!aviso.mensagem.trim()) erro = 'aviso sem mensagem';\n}\nreturn [{ json: ok\n  ? { rota: 'aviso_resultado', id: aviso.id, ok: true }\n  : { rota: 'aviso_resultado', id: aviso.id, ok: false, erro: String(erro).slice(0, 300) } }];\n"
+      },
+      "name": "Resultado do envio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        120
+      ],
+      "id": "a7150b0b-0000-4a00-9000-000000000007"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ROBO_GOBY_URL || 'https://emcynyuzuafovconujwo.supabase.co/functions/v1/robo-goby' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ROBO_GOBY_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Robô: confirma",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        120
+      ],
+      "onError": "continueRegularOutput",
+      "notesInFlow": true,
+      "notes": "aviso_resultado (enviado ou o erro)",
+      "id": "a7150b0b-0000-4a00-9000-000000000008"
+    }
+  ],
+  "connections": {
+    "A cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Robô: avisos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Robô: avisos": {
+      "main": [
+        [
+          {
+            "node": "Separa avisos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Separa avisos": {
+      "main": [
+        [
+          {
+            "node": "Um por vez",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Um por vez": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Espera 3 s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Espera 3 s": {
+      "main": [
+        [
+          {
+            "node": "Manda no WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manda no WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Resultado do envio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resultado do envio": {
+      "main": [
+        [
+          {
+            "node": "Robô: confirma",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Robô: confirma": {
+      "main": [
+        [
+          {
+            "node": "Um por vez",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all"
+  },
+  "pinData": {}
+}

@@ -1058,6 +1058,62 @@ for _s, _c in conn.items():
     if not any(p["name"] == "formato" for p in _qp):
         _qp.append({"name": "formato", "value": "texto"})
 
+# ── 14. Avisos do robô: a resposta SIM/NÃO da reserva (sócio, 07/10/2026) ───────────
+# O robô da Goby manda avisos pelo WhatsApp da Goby (fluxo goby-avisos-robo.json), entre eles
+# "vai na reserva? SIM ou NÃO". Toda mensagem que CHEGA passa antes por ele:
+#   POST <robô> { rota: "resposta", telefone, texto }
+#   tratado true  → manda a `resposta` dele e PARA (a Nina não responde essa);
+#   tratado false, erro, 401 ou robô fora do ar → segue o atendimento normal.
+# Só mensagem de verdade do WhatsApp, com texto e de um telefone (grupo e /goby-teste não).
+TEL_ZAP = "String($('Normaliza').first().json.chatId || '').replace(/\\D/g, '')"
+PERGUNTA_ROBO = ("$('Normaliza').first().json.canal === 'whatsapp' && "
+                 "String($('Normaliza').first().json.message || '').trim() !== '' && "
+                 "/^\\d{10,13}$/.test(" + TEL_ZAP + ")")
+px, py = nodes["Normaliza"]["position"]
+add_node(_if("Pergunta ao robô?", PERGUNTA_ROBO, [px + 120, py - 200]))
+add_node({
+    "parameters": {
+        "method": "POST",
+        "url": ROBO_URL,
+        "sendHeaders": True,
+        "headerParameters": json.loads(json.dumps(ROBO_HEADER)),
+        "sendBody": True,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ rota: 'resposta', telefone: " + TEL_ZAP + ", texto: String($('Normaliza').first().json.message || '') }) }}",
+        "options": {"timeout": 5000, "response": {"response": {"neverError": True}}},
+    },
+    "name": "Robô: resposta", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
+    "position": [px + 300, py - 200], "onError": "continueRegularOutput",
+    "notesInFlow": True, "notes": "SIM/NÃO da reserva e outras respostas a avisos do robô",
+    "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Robô: resposta")),
+})
+add_node(_if("Robô tratou?", "$json.ok === true && $json.tratado === true && String($json.resposta || '').trim() !== ''", [px + 480, py - 200]))
+add_node({
+    "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Normaliza').first().json.instancia || 'goby' }}",
+        "sendHeaders": True,
+        "headerParameters": {"parameters": [
+            {"name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}"},
+            {"name": "Content-Type", "value": "application/json"},
+        ]},
+        "sendBody": True,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: " + TEL_ZAP + ", text: String($('Robô: resposta').first().json.resposta) }) }}",
+        "options": {},
+    },
+    "name": "Responde pelo robô", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
+    "position": [px + 660, py - 300], "onError": "continueRegularOutput",
+    "notesInFlow": True, "notes": "a resposta do robô, como veio; a Nina não entra",
+    "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Responde pelo robô")),
+})
+conn["Normaliza"]["main"] = [[{"node": "Pergunta ao robô?", "type": "main", "index": 0}]]
+conn["Pergunta ao robô?"] = {"main": [[{"node": "Robô: resposta", "type": "main", "index": 0}],
+                                      [{"node": "Junta mensagens?", "type": "main", "index": 0}]]}
+conn["Robô: resposta"] = {"main": [[{"node": "Robô tratou?", "type": "main", "index": 0}]]}
+conn["Robô tratou?"] = {"main": [[{"node": "Responde pelo robô", "type": "main", "index": 0}],
+                                 [{"node": "Junta mensagens?", "type": "main", "index": 0}]]}
+
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
 texto = json.dumps(f, ensure_ascii=False)
@@ -1099,7 +1155,10 @@ for _t in tools_de("Agente Nina (suporte)"):
 assert "EXATAMENTE como veio" in nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]
 assert [[d["node"] for d in o] for o in conn["Chegou mensagem mais nova?"]["main"]] == [["Junta na próxima"], [ROBO_QUEM]]
 assert [[d["node"] for d in o] for o in conn["Junta mensagens?"]["main"]] == [["Espera mais mensagens"], ["Identificar"]]
-assert [d["node"] for d in conn["Normaliza"]["main"][0]] == ["Junta mensagens?"]
+assert [d["node"] for d in conn["Normaliza"]["main"][0]] == ["Pergunta ao robô?"]
+assert [[d["node"] for d in o] for o in conn["Pergunta ao robô?"]["main"]] == [["Robô: resposta"], ["Junta mensagens?"]]
+assert [[d["node"] for d in o] for o in conn["Robô tratou?"]["main"]] == [["Responde pelo robô"], ["Junta mensagens?"]]
+assert "rota: 'resposta'" in nodes["Robô: resposta"]["parameters"]["jsonBody"]
 assert all(nodes[_ag]["parameters"]["text"] == MENSAGEM for _ag in ("Agente Nina", "Agente Nina (entregador)", "Agente Nina (loja)", "Agente Nina (suporte)"))
 assert [d["node"] for d in conn[ROBO_QUEM]["main"][0]] == ["Monta contexto"]
 assert "Meu cadastro" not in nodes and "Minha semana" not in nodes

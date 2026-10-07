@@ -2427,6 +2427,145 @@
         -764
       ],
       "id": "99965de5-aa9b-5596-8116-c7420d9bf5d1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Pergunta ao robô?",
+              "leftValue": "={{ $('Normaliza').first().json.canal === 'whatsapp' && String($('Normaliza').first().json.message || '').trim() !== '' && /^\\d{10,13}$/.test(String($('Normaliza').first().json.chatId || '').replace(/\\D/g, '')) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Pergunta ao robô?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -5352,
+        -664
+      ],
+      "id": "f01f522a-40c5-5b89-8e12-7ec978b9e7ab"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ROBO_GOBY_URL || 'https://emcynyuzuafovconujwo.supabase.co/functions/v1/robo-goby' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ROBO_GOBY_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ rota: 'resposta', telefone: String($('Normaliza').first().json.chatId || '').replace(/\\D/g, ''), texto: String($('Normaliza').first().json.message || '') }) }}",
+        "options": {
+          "timeout": 5000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Robô: resposta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -5172,
+        -664
+      ],
+      "onError": "continueRegularOutput",
+      "notesInFlow": true,
+      "notes": "SIM/NÃO da reserva e outras respostas a avisos do robô",
+      "id": "e5bdcb36-d6b5-5804-8b7c-6c4bb28f3721"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Robô tratou?",
+              "leftValue": "={{ $json.ok === true && $json.tratado === true && String($json.resposta || '').trim() !== '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Robô tratou?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -4992,
+        -664
+      ],
+      "id": "6ea0fd69-4968-5aec-836d-50ae58e634bd"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Normaliza').first().json.instancia || 'goby' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: String($('Normaliza').first().json.chatId || '').replace(/\\D/g, ''), text: String($('Robô: resposta').first().json.resposta) }) }}",
+        "options": {}
+      },
+      "name": "Responde pelo robô",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -4812,
+        -764
+      ],
+      "onError": "continueRegularOutput",
+      "notesInFlow": true,
+      "notes": "a resposta do robô, como veio; a Nina não entra",
+      "id": "1b3879fa-f196-5dcb-b498-592184fcf2dd"
     }
   ],
   "connections": {
@@ -2463,7 +2602,7 @@
       "main": [
         [
           {
-            "node": "Junta mensagens?",
+            "node": "Pergunta ao robô?",
             "type": "main",
             "index": 0
           }
@@ -3271,6 +3410,53 @@
         [
           {
             "node": "Robô: quem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pergunta ao robô?": {
+      "main": [
+        [
+          {
+            "node": "Robô: resposta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Junta mensagens?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Robô: resposta": {
+      "main": [
+        [
+          {
+            "node": "Robô tratou?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Robô tratou?": {
+      "main": [
+        [
+          {
+            "node": "Responde pelo robô",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Junta mensagens?",
             "type": "main",
             "index": 0
           }
