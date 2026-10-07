@@ -177,7 +177,7 @@
     },
     {
       "parameters": {
-        "url": "={{ $env.AUUII_API_URL }}/api/suporte/identificar?instancia=goby&telefone={{ $('Normaliza').first().json.chatId }}&msgId={{ $('Normaliza').first().json.msgId }}&espera={{ $('Normaliza').first().json.canal === 'whatsapp' && !!$('Normaliza').first().json.msgId ? (Number($env.NINA_ESPERA_JUNTAR) || 8) : '' }}",
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/identificar?instancia=goby&telefone={{ $('Normaliza').first().json.chatId }}&msgId={{ $('Normaliza').first().json.msgId }}&espera={{ $('Normaliza').first().json.canal === 'whatsapp' && !!$('Normaliza').first().json.msgId ? (() => { let v = NaN; try { v = Number($('Config da Nina').first().json.esperaJuntarSeg); } catch (e) {} return Number.isInteger(v) && v >= 0 && v <= 60 ? v : (Number($env.NINA_ESPERA_JUNTAR) || 8); })() : '' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -2327,7 +2327,7 @@
           "conditions": [
             {
               "id": "Junta mensagens?",
-              "leftValue": "={{ $('Normaliza').first().json.canal === 'whatsapp' && !!$('Normaliza').first().json.msgId }}",
+              "leftValue": "={{ $('Normaliza').first().json.canal === 'whatsapp' && !!$('Normaliza').first().json.msgId && (() => { let v = NaN; try { v = Number($('Config da Nina').first().json.esperaJuntarSeg); } catch (e) {} return Number.isInteger(v) && v >= 0 && v <= 60 ? v : (Number($env.NINA_ESPERA_JUNTAR) || 8); })() > 0 }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -2351,7 +2351,7 @@
     },
     {
       "parameters": {
-        "amount": "={{ (Number($env.NINA_ESPERA_JUNTAR) || 8) }}",
+        "amount": "={{ (() => { let v = NaN; try { v = Number($('Config da Nina').first().json.esperaJuntarSeg); } catch (e) {} return Number.isInteger(v) && v >= 0 && v <= 60 ? v : (Number($env.NINA_ESPERA_JUNTAR) || 8); })() }}",
         "unit": "seconds"
       },
       "name": "Espera mais mensagens",
@@ -2364,7 +2364,7 @@
       "id": "552d4ecc-d12f-5d78-a6aa-66d37c91b743",
       "webhookId": "c99f3cac-8510-54f1-a066-858eaf33bfa0",
       "notesInFlow": true,
-      "notes": "junta as mensagens seguidas (NINA_ESPERA_JUNTAR, padrão 8 s)"
+      "notes": "junta as mensagens seguidas (tempo do painel da Goby; reserva: NINA_ESPERA_JUNTAR, 8 s)"
     },
     {
       "parameters": {
@@ -2785,6 +2785,39 @@
         -804
       ],
       "id": "308b3ddc-2dd8-5153-8b57-13912d68fd68"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/config",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-suporte-api-key",
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 3000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Config da Nina",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -5532,
+        -164
+      ],
+      "onError": "continueRegularOutput",
+      "notesInFlow": true,
+      "notes": "segundos pra juntar mensagens (painel da Goby)",
+      "id": "b16339f2-a602-58fa-83af-985595549b0c"
     }
   ],
   "connections": {
@@ -3646,7 +3679,7 @@
         ],
         [
           {
-            "node": "Junta mensagens?",
+            "node": "Config da Nina",
             "type": "main",
             "index": 0
           }
@@ -3704,7 +3737,7 @@
         ],
         [
           {
-            "node": "Junta mensagens?",
+            "node": "Config da Nina",
             "type": "main",
             "index": 0
           }
@@ -3745,6 +3778,17 @@
         [
           {
             "node": "Canal e WhatsApp?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config da Nina": {
+      "main": [
+        [
+          {
+            "node": "Junta mensagens?",
             "type": "main",
             "index": 0
           }

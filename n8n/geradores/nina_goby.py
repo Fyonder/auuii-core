@@ -1340,6 +1340,40 @@ for _a in nodes["Saudação"]["parameters"]["assignments"]["assignments"]:
     if _a["name"] == "resumo":
         _a["value"] = "={{ $('Monta contexto').first().json.resumoCorte || '' }}"
 
+# ── 19. Espera pra juntar mensagens vem do painel (dono, 07/10/2026) ──────────────────
+# "Esse tempo vamos deixar editável dentro do painel." O Wait roda ANTES do Identificar, então
+# o n8n lê o valor numa consulta rápida (GET /goby/config, backend PR #73, cache 1 min).
+# Prioridade: painel → variável NINA_ESPERA_JUNTAR → 8. Painel em 0 = não junta (não espera).
+cx, cy = nodes["Junta mensagens?"]["position"]
+add_node({
+    "parameters": {
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/config",
+        "sendHeaders": True,
+        "headerParameters": {"parameters": [{"name": "x-suporte-api-key", "value": CHAVE_NINA}]},
+        "options": {"timeout": 3000, "response": {"response": {"neverError": True}}},
+    },
+    "name": "Config da Nina", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
+    "position": [cx - 180, cy + 140], "onError": "continueRegularOutput",
+    "notesInFlow": True, "notes": "segundos pra juntar mensagens (painel da Goby)",
+    "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Config da Nina")),
+})
+for _s, _c in conn.items():
+    if _s == "Config da Nina":
+        continue
+    for _outs in _c.values():
+        for _out in _outs:
+            for _d in _out:
+                if _d["node"] == "Junta mensagens?":
+                    _d["node"] = "Config da Nina"
+conn["Config da Nina"] = {"main": [[{"node": "Junta mensagens?", "type": "main", "index": 0}]]}
+ESPERA_PAINEL = ("(() => { let v = NaN; try { v = Number($('Config da Nina').first().json.esperaJuntarSeg); } catch (e) {} "
+                 "return Number.isInteger(v) && v >= 0 && v <= 60 ? v : (Number($env.NINA_ESPERA_JUNTAR) || 8); })()")
+nodes["Junta mensagens?"]["parameters"]["conditions"]["conditions"][0]["leftValue"] = "={{ " + VEIO_DO_ZAP + " && " + ESPERA_PAINEL + " > 0 }}"
+nodes["Espera mais mensagens"]["parameters"]["amount"] = "={{ " + ESPERA_PAINEL + " }}"
+nodes["Espera mais mensagens"]["notes"] = "junta as mensagens seguidas (tempo do painel da Goby; reserva: NINA_ESPERA_JUNTAR, 8 s)"
+_u = nodes["Identificar"]["parameters"]["url"]
+nodes["Identificar"]["parameters"]["url"] = _u[:_u.index("&espera=")] + "&espera={{ " + VEIO_DO_ZAP + " ? " + ESPERA_PAINEL + " : '' }}"
+
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
 texto = json.dumps(f, ensure_ascii=False)
@@ -1381,13 +1415,15 @@ for _t in tools_de("Agente Nina (suporte)"):
 assert "EXATAMENTE como veio" in nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]
 assert [[d["node"] for d in o] for o in conn["Chegou mensagem mais nova?"]["main"]] == [["Junta na próxima"], [ROBO_QUEM]]
 assert [[d["node"] for d in o] for o in conn["Junta mensagens?"]["main"]] == [["Espera mais mensagens"], ["Identificar"]]
+assert not any(d["node"] == "Junta mensagens?" for s_, c_ in conn.items() if s_ != "Config da Nina" for outs in c_.values() for out in outs for d in out)
+assert [d["node"] for d in conn["Config da Nina"]["main"][0]] == ["Junta mensagens?"]
 assert [d["node"] for d in conn["Normaliza"]["main"][0]] == ["Pergunta ao robô?"]
 assert [d["node"] for d in conn["Suporte configurado?"]["main"][0]] == ["Equipe: números"]
 assert [d["node"] for d in conn["Equipe: números"]["main"][0]] == ["Números do suporte"]
 assert "idBackend.suporte === true" in nodes["Monta contexto"]["parameters"]["jsCode"]
-assert [[d["node"] for d in o] for o in conn["Pergunta ao robô?"]["main"]] == [["Robô: resposta"], ["Junta mensagens?"]]
+assert [[d["node"] for d in o] for o in conn["Pergunta ao robô?"]["main"]] == [["Robô: resposta"], ["Config da Nina"]]
 assert [[d["node"] for d in o] for o in conn["Robô tratou?"]["main"]] == [["Responde pelo robô"], ["Espera SIM/NÃO?"]]
-assert [[d["node"] for d in o] for o in conn["Espera SIM/NÃO?"]["main"]] == [["Chamado SIM/NÃO"], ["Junta mensagens?"]]
+assert [[d["node"] for d in o] for o in conn["Espera SIM/NÃO?"]["main"]] == [["Chamado SIM/NÃO"], ["Config da Nina"]]
 assert [[d["node"] for d in o] for o in conn["Primeira vez?"]["main"]] == [["Passa pra equipe"], ["Esperando SIM/NÃO"]]
 assert [d["node"] for d in conn["Passa pra equipe"]["main"][0]] == ["Canal e WhatsApp?"]
 assert not {"Lembrete SIM/NÃO", "Lembra uma vez?", "Pede SIM ou NÃO"} & set(nodes)
