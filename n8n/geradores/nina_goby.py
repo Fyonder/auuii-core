@@ -1136,9 +1136,71 @@ TEXTO_PRONTO_LIMPO = """  // Modo suporte: a ferramenta já devolve a mensagem p
   if (pronto) raw = pronto;
 """
 _code = nodes["Interpreta resposta"]["parameters"]["jsCode"]
-_alvo = "  const raw = item.json.output;\n"
-assert _code.count(_alvo) == 1, "Interpreta resposta mudou: ajuste a etapa 15"
-nodes["Interpreta resposta"]["parameters"]["jsCode"] = _code.replace(_alvo, "  let raw = item.json.output;\n" + TEXTO_PRONTO_LIMPO)
+if "const prontos = passos.map" not in _code:  # idempotente: o gerador parte do próprio JSON
+    _alvo = "  const raw = item.json.output;\n"
+    assert _code.count(_alvo) == 1, "Interpreta resposta mudou: ajuste a etapa 15"
+    nodes["Interpreta resposta"]["parameters"]["jsCode"] = _code.replace(_alvo, "  let raw = item.json.output;\n" + TEXTO_PRONTO_LIMPO)
+
+# ── 16. Modo suporte pela EQUIPE do robô, sem depender de SUPORTE_WHATSAPP (dono, 07/10/2026) ─
+# "Retirar a dependência da variável." Suporte = contato de tipo "equipe" no painel do robô do
+# sócio (o robô responde tipo equipe; o backend devolve `suporte: true` no identificar) ou
+# número na variável, que fica opcional. O aviso de "precisa de humano" vai pros números que o
+# backend devolve (equipe + variável do Render), somados aos da variável daqui, sem repetir.
+# Backend sem o PR #71: identificar sem `suporte` e /goby/equipe/numeros 404 → a variável
+# segue valendo como antes.
+_js = nodes["Monta contexto"]["parameters"]["jsCode"]
+_alvo = "const ehSuporte = suportes.includes(canon($('Normaliza').first().json.chatId));"
+assert _js.count(_alvo) == 1 or "idBackend.suporte === true" in _js, "Monta contexto mudou: ajuste a etapa 16"
+nodes["Monta contexto"]["parameters"]["jsCode"] = _js if "idBackend.suporte === true" in _js else _js.replace(_alvo,
+    "// Equipe da Goby: o robô diz \"equipe\", o backend diz suporte:true, ou o número está na variável (opcional).\n"
+    "const ehSuporte = suportes.includes(canon($('Normaliza').first().json.chatId)) || idBackend.suporte === true || tipoRobo === 'equipe';")
+
+# Quem está em modo suporte não abre chamado (antes: só quem estava na variável).
+_hl = nodes["Handoff de outro numero?"]["parameters"]["conditions"]["conditions"][0]
+_antes = _hl["leftValue"]
+assert _antes.startswith("={{ !") and _antes.endswith(" }}"), _antes
+if "isExecuted" not in _antes:  # idempotente
+    _hl["leftValue"] = ("={{ " + _antes[4:-3] + " && !($('Monta contexto').isExecuted && "
+                        "$('Monta contexto').first().json.perfil === 'suporte') }}")
+
+# O aviso não depende mais de ter a variável: quem decide se tem pra quem mandar é a lista.
+nodes["Suporte configurado?"]["parameters"]["conditions"]["conditions"][0]["leftValue"] = "={{ 'sempre' }}"
+nodes["Suporte configurado?"]["notesInFlow"] = True
+nodes["Suporte configurado?"]["notes"] = "a lista de números decide (equipe do robô + variável)"
+
+sx, sy = nodes["Números do suporte"]["position"]
+add_node({
+    "parameters": {
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/equipe/numeros",
+        "sendHeaders": True,
+        "headerParameters": {"parameters": [{"name": "x-suporte-api-key", "value": CHAVE_NINA}]},
+        "options": {"timeout": 8000, "response": {"response": {"neverError": True}}},
+    },
+    "name": "Equipe: números", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
+    "position": [sx - 180, sy - 140], "onError": "continueRegularOutput",
+    "notesInFlow": True, "notes": "equipe do robô da Goby + SUPORTE_WHATSAPP do Render",
+    "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Equipe: números")),
+})
+nodes["Números do suporte"]["parameters"]["jsCode"] = """// Um aviso por número da equipe: os do backend (equipe do robô da Goby + SUPORTE_WHATSAPP do
+// Render) e, de reserva, os da variável daqui. Sem repetir (DDD + 8 finais).
+let doBackend = [];
+try { doBackend = ($('Equipe: números').first().json || {}).numeros || []; } catch (e) { doBackend = []; }
+const daVariavel = String($env.SUPORTE_WHATSAPP || '').split(/[,;\\n]+/);
+const vistos = new Set();
+const saida = [];
+for (const n of [...(Array.isArray(doBackend) ? doBackend : []), ...daVariavel]) {
+  let d = String(n || '').replace(/\\D/g, '');
+  if (d.length === 10 || d.length === 11) d = '55' + d;
+  if (d.length < 12) continue;
+  const k = d.slice(2, 4) + d.slice(-8);
+  if (vistos.has(k)) continue;
+  vistos.add(k);
+  saida.push({ json: { numero: d } });
+}
+return saida;
+"""
+conn["Suporte configurado?"]["main"][0] = [{"node": "Equipe: números", "type": "main", "index": 0}]
+conn["Equipe: números"] = {"main": [[{"node": "Números do suporte", "type": "main", "index": 0}]]}
 
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
@@ -1182,6 +1244,9 @@ assert "EXATAMENTE como veio" in nodes["Agente Nina (suporte)"]["parameters"]["o
 assert [[d["node"] for d in o] for o in conn["Chegou mensagem mais nova?"]["main"]] == [["Junta na próxima"], [ROBO_QUEM]]
 assert [[d["node"] for d in o] for o in conn["Junta mensagens?"]["main"]] == [["Espera mais mensagens"], ["Identificar"]]
 assert [d["node"] for d in conn["Normaliza"]["main"][0]] == ["Pergunta ao robô?"]
+assert [d["node"] for d in conn["Suporte configurado?"]["main"][0]] == ["Equipe: números"]
+assert [d["node"] for d in conn["Equipe: números"]["main"][0]] == ["Números do suporte"]
+assert "idBackend.suporte === true" in nodes["Monta contexto"]["parameters"]["jsCode"]
 assert [[d["node"] for d in o] for o in conn["Pergunta ao robô?"]["main"]] == [["Robô: resposta"], ["Junta mensagens?"]]
 assert [[d["node"] for d in o] for o in conn["Robô tratou?"]["main"]] == [["Responde pelo robô"], ["Junta mensagens?"]]
 assert "rota: 'resposta'" in nodes["Robô: resposta"]["parameters"]["jsonBody"]
