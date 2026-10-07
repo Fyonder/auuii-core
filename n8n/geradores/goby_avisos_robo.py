@@ -15,7 +15,7 @@ Fluxo (a cada 1 minuto, porque aviso não buscado em poucos minutos é descartad
   1. GET  <robô>?rota=avisos          → { ok, avisos: [{ id, telefone, mensagem, tipo, esperaResposta }] }
      Cada aviso vem UMA vez só (até 15 por vez, os urgentes primeiro). Nada de testar na mão:
      buscar sem mandar perde o aviso.
-  2. um por vez, esperando 3 s entre eles (rajada faz o WhatsApp bloquear o número);
+  2. um por vez, 3 s entre eles (batching do nó de envio; sem loop, que travava sem aviso);
   3. POST Evolution /message/sendText/goby { number, text };
   4. POST <robô> { rota: "aviso_resultado", id, ok: true } ou { ..., ok: false, erro }.
 Todas as chamadas ao robô levam o cabeçalho x-api-key (ROBO_GOBY_KEY). 401 = chave errada.
@@ -49,22 +49,22 @@ return r.avisos
   } }));
 """
 
-JS_RESULTADO = r"""// Resposta da Evolution → o que o robô precisa saber (aviso_resultado).
-const aviso = $('Um por vez').first().json;
-const r = $input.first().json || {};
-const status = Number(r.statusCode || 0);
-const ok = status >= 200 && status < 300 && !r.error;
-let erro = '';
-if (!ok) {
+JS_RESULTADO = r"""// Respostas da Evolution → o que o robô precisa saber (aviso_resultado), um por aviso.
+// O envio sai na mesma ordem dos avisos: o item i daqui é o aviso i do Separa avisos.
+const avisos = $('Separa avisos').all();
+return $input.all().map((it, i) => {
+  const aviso = (avisos[i] || {}).json || {};
+  const r = it.json || {};
+  const status = Number(r.statusCode || 0);
+  const ok = status >= 200 && status < 300 && !r.error;
+  if (ok) return { json: { rota: 'aviso_resultado', id: aviso.id, ok: true } };
   const b = r.body || {};
   const msg = r.error?.message || r.error || b.response?.message || b.message || b.error;
-  erro = (typeof msg === 'string' ? msg : JSON.stringify(msg || '')) || ('HTTP ' + status);
+  let erro = (typeof msg === 'string' ? msg : JSON.stringify(msg || '')) || ('HTTP ' + status);
   if (!aviso.telefone) erro = 'aviso sem telefone';
-  else if (!aviso.mensagem.trim()) erro = 'aviso sem mensagem';
-}
-return [{ json: ok
-  ? { rota: 'aviso_resultado', id: aviso.id, ok: true }
-  : { rota: 'aviso_resultado', id: aviso.id, ok: false, erro: String(erro).slice(0, 300) } }];
+  else if (!String(aviso.mensagem || '').trim()) erro = 'aviso sem mensagem';
+  return { json: { rota: 'aviso_resultado', id: aviso.id, ok: false, erro: String(erro).slice(0, 300) } };
+});
 """
 
 
@@ -109,25 +109,6 @@ def montar():
             "id": _id(3),
         },
         {
-            "parameters": {"options": {}},
-            "name": "Um por vez",
-            "type": "n8n-nodes-base.splitInBatches",
-            "typeVersion": 3,
-            "position": [660, 0],
-            "id": _id(4),
-        },
-        {
-            "parameters": {"amount": 3, "unit": "seconds"},
-            "name": "Espera 3 s",
-            "type": "n8n-nodes-base.wait",
-            "typeVersion": 1.1,
-            "position": [880, 120],
-            "webhookId": "a7150b0b-0000-4a00-9000-0000000000w1",
-            "notesInFlow": True,
-            "notes": "sem rajada (o WhatsApp bloqueia)",
-            "id": _id(5),
-        },
-        {
             "parameters": {
                 "method": "POST",
                 "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/goby",
@@ -138,8 +119,12 @@ def montar():
                 ]},
                 "sendBody": True,
                 "specifyBody": "json",
-                "jsonBody": "={{ JSON.stringify({ number: $('Um por vez').first().json.telefone, text: $('Um por vez').first().json.mensagem }) }}",
-                "options": {"timeout": 20000, "response": {"response": {"neverError": True, "fullResponse": True}}},
+                "jsonBody": "={{ JSON.stringify({ number: $json.telefone, text: $json.mensagem }) }}",
+                # Um por vez, 3 s entre um e outro (rajada faz o WhatsApp bloquear o número).
+                # Sem loop: o loop (splitInBatches) ficava esperando para sempre quando não havia aviso.
+                "options": {"timeout": 20000,
+                            "batching": {"batch": {"batchSize": 1, "batchInterval": 3000}},
+                            "response": {"response": {"neverError": True, "fullResponse": True}}},
             },
             "name": "Manda no WhatsApp",
             "type": "n8n-nodes-base.httpRequest",
@@ -147,7 +132,7 @@ def montar():
             "position": [1100, 120],
             "onError": "continueRegularOutput",
             "notesInFlow": True,
-            "notes": "número da Goby (instância goby); texto como veio",
+            "notes": "um por vez, 3 s entre eles; texto como veio",
             "id": _id(6),
         },
         {
@@ -183,13 +168,9 @@ def montar():
     conn = {
         "A cada minuto": {"main": [[liga("Robô: avisos")]]},
         "Robô: avisos": {"main": [[liga("Separa avisos")]]},
-        "Separa avisos": {"main": [[liga("Um por vez")]]},
-        # splitInBatches v3: saída 0 = terminou, saída 1 = o próximo item
-        "Um por vez": {"main": [[], [liga("Espera 3 s")]]},
-        "Espera 3 s": {"main": [[liga("Manda no WhatsApp")]]},
+        "Separa avisos": {"main": [[liga("Manda no WhatsApp")]]},
         "Manda no WhatsApp": {"main": [[liga("Resultado do envio")]]},
         "Resultado do envio": {"main": [[liga("Robô: confirma")]]},
-        "Robô: confirma": {"main": [[liga("Um por vez")]]},
     }
     return {
         "id": ID,
@@ -213,6 +194,11 @@ if __name__ == '__main__':
                 assert d["node"] in nomes, d["node"]
     texto = json.dumps(f, ensure_ascii=False)
     assert ".item.json" not in texto
+    import uuid as _uuid
+    for _n in f["nodes"]:
+        _uuid.UUID(_n["id"])
+        if "webhookId" in _n:
+            _uuid.UUID(_n["webhookId"])
     assert "x-api-key" in texto and "aviso_resultado" in texto and "rota" in texto
     ARQ.write_text(json.dumps(f, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"ok: {ARQ.name} ({len(f['nodes'])} nós, id {ID})")

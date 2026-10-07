@@ -1115,6 +1115,31 @@ conn["Robô: resposta"] = {"main": [[{"node": "Robô tratou?", "type": "main", "
 conn["Robô tratou?"] = {"main": [[{"node": "Responde pelo robô", "type": "main", "index": 0}],
                                  [{"node": "Junta mensagens?", "type": "main", "index": 0}]]}
 
+# ── 15. Suporte: a mensagem pronta sai limpa mesmo se a IA vazar o raciocínio (07/10/2026) ─
+# Visto às 15:41: a ferramenta devolveu o `texto` certo e o gpt-oss respondeu "It looks like
+# the response got truncated? ... We need to output exactly that." + o texto. O agente do
+# suporte passa a devolver os passos (returnIntermediateSteps) e o Interpreta resposta, se a
+# resposta CONTÉM o `texto` de uma ferramenta, manda só esse texto. Resposta curta tirada do
+# texto ("chegou às 18:04") não contém o texto inteiro: segue como a IA escreveu.
+nodes["Agente Nina (suporte)"]["parameters"]["options"]["returnIntermediateSteps"] = True
+TEXTO_PRONTO_LIMPO = """  // Modo suporte: a ferramenta já devolve a mensagem pronta (`texto`). Se a IA repetiu esse
+  // texto no meio de raciocínio vazado, vai só o texto, exatamente como a ferramenta mandou.
+  const passos = Array.isArray(item.json.intermediateSteps) ? item.json.intermediateSteps : [];
+  const prontos = passos.map((p) => {
+    let o = p && p.observation;
+    if (typeof o === 'string') { try { o = JSON.parse(o); } catch (e) { o = null; } }
+    if (Array.isArray(o)) o = o[0];
+    return o && typeof o.texto === 'string' && o.texto.trim() ? o.texto : null;
+  }).filter(Boolean);
+  const umaLinha = (t) => String(t || '').replace(/\\s+/g, ' ').trim();
+  const pronto = typeof raw === 'string' ? prontos.reverse().find((t) => umaLinha(raw).includes(umaLinha(t))) : null;
+  if (pronto) raw = pronto;
+"""
+_code = nodes["Interpreta resposta"]["parameters"]["jsCode"]
+_alvo = "  const raw = item.json.output;\n"
+assert _code.count(_alvo) == 1, "Interpreta resposta mudou: ajuste a etapa 15"
+nodes["Interpreta resposta"]["parameters"]["jsCode"] = _code.replace(_alvo, "  let raw = item.json.output;\n" + TEXTO_PRONTO_LIMPO)
+
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
 texto = json.dumps(f, ensure_ascii=False)

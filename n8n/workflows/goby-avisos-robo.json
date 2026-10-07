@@ -79,36 +79,6 @@
     },
     {
       "parameters": {
-        "options": {}
-      },
-      "name": "Um por vez",
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 3,
-      "position": [
-        660,
-        0
-      ],
-      "id": "a7150b0b-0000-4a00-9000-000000000004"
-    },
-    {
-      "parameters": {
-        "amount": 3,
-        "unit": "seconds"
-      },
-      "name": "Espera 3 s",
-      "type": "n8n-nodes-base.wait",
-      "typeVersion": 1.1,
-      "position": [
-        880,
-        120
-      ],
-      "webhookId": "a7150b0b-0000-4a00-9000-0000000000w1",
-      "notesInFlow": true,
-      "notes": "sem rajada (o WhatsApp bloqueia)",
-      "id": "a7150b0b-0000-4a00-9000-000000000005"
-    },
-    {
-      "parameters": {
         "method": "POST",
         "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/goby",
         "sendHeaders": true,
@@ -126,9 +96,15 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ number: $('Um por vez').first().json.telefone, text: $('Um por vez').first().json.mensagem }) }}",
+        "jsonBody": "={{ JSON.stringify({ number: $json.telefone, text: $json.mensagem }) }}",
         "options": {
           "timeout": 20000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 3000
+            }
+          },
           "response": {
             "response": {
               "neverError": true,
@@ -146,12 +122,12 @@
       ],
       "onError": "continueRegularOutput",
       "notesInFlow": true,
-      "notes": "número da Goby (instância goby); texto como veio",
+      "notes": "um por vez, 3 s entre eles; texto como veio",
       "id": "a7150b0b-0000-4a00-9000-000000000006"
     },
     {
       "parameters": {
-        "jsCode": "// Resposta da Evolution → o que o robô precisa saber (aviso_resultado).\nconst aviso = $('Um por vez').first().json;\nconst r = $input.first().json || {};\nconst status = Number(r.statusCode || 0);\nconst ok = status >= 200 && status < 300 && !r.error;\nlet erro = '';\nif (!ok) {\n  const b = r.body || {};\n  const msg = r.error?.message || r.error || b.response?.message || b.message || b.error;\n  erro = (typeof msg === 'string' ? msg : JSON.stringify(msg || '')) || ('HTTP ' + status);\n  if (!aviso.telefone) erro = 'aviso sem telefone';\n  else if (!aviso.mensagem.trim()) erro = 'aviso sem mensagem';\n}\nreturn [{ json: ok\n  ? { rota: 'aviso_resultado', id: aviso.id, ok: true }\n  : { rota: 'aviso_resultado', id: aviso.id, ok: false, erro: String(erro).slice(0, 300) } }];\n"
+        "jsCode": "// Respostas da Evolution → o que o robô precisa saber (aviso_resultado), um por aviso.\n// O envio sai na mesma ordem dos avisos: o item i daqui é o aviso i do Separa avisos.\nconst avisos = $('Separa avisos').all();\nreturn $input.all().map((it, i) => {\n  const aviso = (avisos[i] || {}).json || {};\n  const r = it.json || {};\n  const status = Number(r.statusCode || 0);\n  const ok = status >= 200 && status < 300 && !r.error;\n  if (ok) return { json: { rota: 'aviso_resultado', id: aviso.id, ok: true } };\n  const b = r.body || {};\n  const msg = r.error?.message || r.error || b.response?.message || b.message || b.error;\n  let erro = (typeof msg === 'string' ? msg : JSON.stringify(msg || '')) || ('HTTP ' + status);\n  if (!aviso.telefone) erro = 'aviso sem telefone';\n  else if (!String(aviso.mensagem || '').trim()) erro = 'aviso sem mensagem';\n  return { json: { rota: 'aviso_resultado', id: aviso.id, ok: false, erro: String(erro).slice(0, 300) } };\n});\n"
       },
       "name": "Resultado do envio",
       "type": "n8n-nodes-base.code",
@@ -227,29 +203,6 @@
       "main": [
         [
           {
-            "node": "Um por vez",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Um por vez": {
-      "main": [
-        [],
-        [
-          {
-            "node": "Espera 3 s",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Espera 3 s": {
-      "main": [
-        [
-          {
             "node": "Manda no WhatsApp",
             "type": "main",
             "index": 0
@@ -273,17 +226,6 @@
         [
           {
             "node": "Robô: confirma",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Robô: confirma": {
-      "main": [
-        [
-          {
-            "node": "Um por vez",
             "type": "main",
             "index": 0
           }
