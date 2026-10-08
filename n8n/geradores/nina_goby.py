@@ -1463,6 +1463,23 @@ _j = _sm.index("COMO LER AS FERRAMENTAS\n") + len("COMO LER AS FERRAMENTAS\n")
 _sm = _sm[:_j] + MEU_DIA_LEITURA + _sm[_j:]
 nodes["Agente Nina (entregador)"]["parameters"]["options"]["systemMessage"] = _sm
 
+# ── 22. O número da Goby foi pra API oficial da Meta (dono, 08/10/2026) ─────────────────
+# O 44 9164-9192 foi registrado na Meta Cloud API e saiu da Evolution (instância `goby` ficou
+# "connecting" pra sempre). A ponte se faz de Evolution pra instância goby (ponte/src/meta.js):
+# a mensagem chega no mesmo formato e a resposta vai pra NINA_WHATSAPP_URL (compose:
+# http://ponte:3100) em vez da Evolution. Sem a variável, volta pra Evolution.
+# O aviso interno pro suporte NÃO vai pela Meta: fora da janela de 24 h do número do suporte
+# ela só aceita template. Sai pelo número da Auuii na Evolution (NINA_AVISO_INSTANCIA).
+BASE_ENVIO = "={{ $env.NINA_WHATSAPP_URL || $env.EVOLUTION_API_URL }}"
+for _n in ("Enviar resposta", "Marcar como lida", "Mostrar digitando", "Responde pelo robô"):
+    _p = nodes[_n]["parameters"]
+    if not _p["url"].startswith(BASE_ENVIO):
+        assert _p["url"].startswith("={{ $env.EVOLUTION_API_URL }}"), (_n, _p["url"])
+        _p["url"] = BASE_ENVIO + _p["url"][len("={{ $env.EVOLUTION_API_URL }}"):]
+nodes["Avisar suporte"]["parameters"]["url"] = (
+    "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.NINA_AVISO_INSTANCIA || 'auuii' }}"
+)
+
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
 texto = json.dumps(f, ensure_ascii=False)

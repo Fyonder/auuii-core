@@ -11,7 +11,9 @@
  *
  * O caminho da IA (Evolution → n8n) não passa por aqui: se a ponte cair, a Duda
  * continua atendendo; só o painel deixa de ver ao vivo — e a fila em disco entrega o
- * atraso quando a ponte volta.
+ * atraso quando a ponte volta. EXCEÇÃO: o número da Goby (Nina) está na API oficial da
+ * Meta desde 08/10/2026 e passa INTEIRO pela ponte (ver meta.js) — ponte fora, Nina muda;
+ * a Meta guarda e reenvia quando ela volta.
  *
  * A ponte só transporta. Quem é quem, o que grava, pausa da IA: tudo no backend.
  */
@@ -21,6 +23,7 @@ const fs = require('fs');
 const path = require('path');
 const { io } = require('socket.io-client');
 const { Classificador } = require('./normalizar');
+const { metaParaEvolution, eventoDeEnvio, GraphMeta } = require('./meta');
 const { version: VERSAO } = require('../package.json');
 
 const cfg = {
@@ -33,6 +36,13 @@ const cfg = {
     instancia: process.env.EVOLUTION_INSTANCE || 'auuii',
     suporte: process.env.SUPORTE_WHATSAPP || '',
     pastaDados: process.env.PONTE_DADOS || '/data',
+    // Número da API oficial (Meta). Sem token e id do número, a parte da Meta fica desligada.
+    metaToken: process.env.META_WHATSAPP_TOKEN || '',
+    metaNumeroId: process.env.META_PHONE_NUMBER_ID || '',
+    // O número da Goby (Nina) foi pra API oficial em 08/10/2026: a instância `goby` sai pela Meta.
+    metaInstancia: process.env.META_INSTANCIA || 'goby',
+    metaVersao: process.env.META_GRAPH_VERSAO || 'v23.0',
+    n8nWebhook: process.env.N8N_WEBHOOK_META || `http://n8n:5678/webhook/${process.env.META_INSTANCIA || 'goby'}`,
 };
 
 function log(...partes) {
@@ -52,6 +62,9 @@ if (cfg.segredo.length < 16) {
 }
 
 const classificador = new Classificador({ suporteWhatsapp: cfg.suporte });
+const graph = cfg.metaToken && cfg.metaNumeroId
+    ? new GraphMeta({ token: cfg.metaToken, phoneNumberId: cfg.metaNumeroId, versao: cfg.metaVersao })
+    : null;
 const desde = Date.now();
 // Espera antes de tentar de novo quando o backend RECUSA a conexão (configurável pra teste).
 const ESPERA_RECUSA_MS = Number(process.env.PONTE_ESPERA_RECUSA_MS || 60000);
@@ -146,6 +159,12 @@ socket.on('connect_error', (err) => {
     if (!socket.active) tentarDeNovo(ESPERA_RECUSA_MS, 'conexão recusada');
 });
 socket.on('enviar', (pedido) => { atenderEnvio(pedido); });
+socket.on('meta', (corpo, ack) => {
+    receberDaMeta(corpo).then(
+        (r) => { if (typeof ack === 'function') ack(r); },
+        (err) => { log(`❌ webhook da Meta: ${err.message}`); if (typeof ack === 'function') ack({ ok: false, erro: err.message }); },
+    );
+});
 
 function dormir(ms) {
     return new Promise((r) => setTimeout(r, ms));
@@ -223,6 +242,18 @@ async function atenderEnvio(pedido) {
     // ANTES do sendText: o SEND_MESSAGE da Evolution chega enquanto a chamada ainda
     // não voltou, e é por este pendente que ele é reconhecido como do operador.
     classificador.registrarPendente({ reqId, conversaId, numero, texto, instancia });
+    if (instancia === cfg.metaInstancia) {
+        try {
+            const id = await enviarPelaMeta(numero, texto);
+            enfileirar('enviado', { reqId, conversaId, id, jid: `${String(numero).replace(/\D/g, '')}@s.whatsapp.net` });
+            log(`📤 enviado pela Meta ${reqId} → ${id}`);
+        } catch (err) {
+            classificador.esquecerPendente(reqId);
+            enfileirar('enviado', { reqId, conversaId, erro: err.message });
+            log(`❌ envio ${reqId} pela Meta falhou: ${err.message}`);
+        }
+        return;
+    }
     try {
         const resp = await fetch(`${cfg.evolutionUrl}/message/sendText/${encodeURIComponent(instancia)}`, {
             method: 'POST',
@@ -240,6 +271,88 @@ async function atenderEnvio(pedido) {
         classificador.esquecerPendente(reqId);
         enfileirar('enviado', { reqId, conversaId, erro: err.message });
         log(`❌ envio ${reqId} falhou: ${err.message}`);
+    }
+}
+
+// ─── Número da API oficial (Meta) ──────────────────────────────────────────────────
+//
+// A ponte se faz de Evolution pra instância da Meta (META_INSTANCIA, `goby`) (ver meta.js): o webhook da Meta chega
+// pelo socket (quem recebe da Meta é o backend), sai daqui pro n8n no formato da
+// Evolution, e o n8n responde chamando /message/sendText/goby AQUI, não na Evolution.
+
+// A Meta reenvia o lote inteiro quando o backend responde 503. O que já foi entregue ao
+// n8n não pode ir de novo: a IA responderia duas vezes.
+const entreguesAoN8n = new Map();
+function jaEntregue(id) {
+    const agora = Date.now();
+    for (const [k, em] of entreguesAoN8n) if (agora - em > 24 * 3600000) entreguesAoN8n.delete(k);
+    return entreguesAoN8n.has(id);
+}
+
+async function receberDaMeta(corpo) {
+    if (!graph) return { ok: false, erro: 'Meta desligada na ponte (faltam META_WHATSAPP_TOKEN e META_PHONE_NUMBER_ID)' };
+    let falhou = null;
+    for (const ev of metaParaEvolution(corpo, cfg.metaInstancia)) {
+        const id = ev.data.key.id;
+        // Painel: o backend descarta id repetido, então reenvio da Meta não duplica lá.
+        const doPainel = classificador.classificar(ev);
+        if (doPainel) { ultimaMensagemEm = Date.now(); enfileirar('evento', doPainel); }
+        if (jaEntregue(id)) continue;
+        try {
+            const resp = await fetch(cfg.n8nWebhook, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(ev),
+                signal: AbortSignal.timeout(8000),
+            });
+            if (!resp.ok) throw new Error(`n8n respondeu ${resp.status}`);
+            entreguesAoN8n.set(id, Date.now());
+        } catch (err) {
+            falhou = err.message;
+            log(`❌ mensagem da Meta ${id} não chegou ao n8n: ${err.message}`);
+        }
+    }
+    return falhou ? { ok: false, erro: falhou } : { ok: true };
+}
+
+/** Envia pela Graph API e põe a mensagem no painel como a Evolution faria (SEND_MESSAGE). */
+async function enviarPelaMeta(numero, texto) {
+    const id = await graph.enviarTexto(numero, texto);
+    const ev = classificador.classificar(eventoDeEnvio({ instancia: cfg.metaInstancia, id: id || `meta-${Date.now()}`, numero, texto }));
+    if (ev) enfileirar('evento', ev);
+    return id;
+}
+
+function responderJson(res, status, corpo) {
+    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(corpo));
+}
+
+const ROTAS_EVOLUTION = new Set(['message/sendText', 'chat/markMessageAsRead', 'chat/sendPresence']);
+
+/** As 3 rotas da Evolution que o fluxo da IA usa, pra instância da Meta. */
+async function atenderComoEvolution(req, res, rota) {
+    const chave = req.headers.apikey;
+    if (typeof chave !== 'string' || chave !== cfg.evolutionKey) return responderJson(res, 401, { error: 'Unauthorized' });
+    if (!graph) return responderJson(res, 503, { response: { message: ['Meta desligada na ponte'] } });
+    let corpo;
+    try { corpo = JSON.parse((await lerCorpo(req)) || '{}'); } catch (_) { return responderJson(res, 400, { response: { message: ['JSON inválido'] } }); }
+    try {
+        if (rota === 'message/sendText') {
+            if (!corpo.number || !corpo.text) return responderJson(res, 400, { response: { message: ['number e text são obrigatórios'] } });
+            const id = await enviarPelaMeta(corpo.number, corpo.text);
+            return responderJson(res, 201, { key: { remoteJid: `${String(corpo.number).replace(/\D/g, '')}@s.whatsapp.net`, fromMe: true, id } });
+        }
+        if (rota === 'chat/markMessageAsRead') {
+            const id = corpo.readMessages?.[0]?.id;
+            if (id) await graph.marcarLida(id);
+            return responderJson(res, 201, { message: 'Read messages', read: 'success' });
+        }
+        // sendPresence: o "digitando…" da Meta já foi junto com o marcar como lida.
+        return responderJson(res, 201, {});
+    } catch (err) {
+        log(`❌ ${rota} pela Meta: ${err.message}`);
+        return responderJson(res, 400, { response: { message: [err.message] } });
     }
 }
 
@@ -268,6 +381,14 @@ const servidor = http.createServer(async (req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, versao: VERSAO, conectada: socket.connected, fila: fila.length, desde, ultimaMensagemEm }));
         return;
+    }
+    // n8n → /message/sendText/goby etc. (só pela rede do docker: a ponte não publica porta).
+    if (req.method === 'POST') {
+        const m = /^\/([a-zA-Z]+\/[a-zA-Z]+)\/([A-Za-z0-9_-]+)$/.exec(req.url.split('?')[0]);
+        if (m && ROTAS_EVOLUTION.has(m[1]) && m[2] === cfg.metaInstancia) {
+            await atenderComoEvolution(req, res, m[1]);
+            return;
+        }
     }
     // Segredo no caminho porque o webhook global da Evolution não manda cabeçalho de
     // autenticação. Caminho errado responde 404 igual a qualquer rota inexistente.
@@ -300,7 +421,10 @@ const servidor = http.createServer(async (req, res) => {
     }
 });
 
-servidor.listen(cfg.porta, () => log(`🌉 ponte ${VERSAO} ouvindo a Evolution na porta ${cfg.porta}`));
+servidor.listen(cfg.porta, () => {
+    log(`🌉 ponte ${VERSAO} ouvindo a Evolution na porta ${cfg.porta}`);
+    log(graph ? `📞 número da Meta ligado (instância ${cfg.metaInstancia} → ${cfg.n8nWebhook})` : '📞 número da Meta desligado');
+});
 
 function encerrar(sinal) {
     log(`⏹️ ${sinal}: gravando a fila (${fila.length}) e saindo`);

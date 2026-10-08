@@ -54,6 +54,12 @@ services:
       #   {{ $env.EVOLUTION_API_URL }}  e  {{ $env.EVOLUTION_API_KEY }}
       EVOLUTION_API_URL: http://evolution:8080
       EVOLUTION_API_KEY: ${AUTHENTICATION_API_KEY}
+      # O numero da Goby esta na API oficial (Meta) desde 08/10/2026: a Nina responde pela
+      # ponte, que fala com a Graph API (docs/ATENDIMENTO.md). Vazio = volta pra Evolution.
+      NINA_WHATSAPP_URL: ${NINA_WHATSAPP_URL-http://ponte:3100}
+      # Aviso interno da Nina pro suporte sai por este numero da Evolution (pela Meta, fora
+      # da janela de 24 h, so template)
+      NINA_AVISO_INSTANCIA: ${NINA_AVISO_INSTANCIA:-auuii}
       # sua API (motoboys, fila, corridas) — usada pelas tools do agente
       #   {{ $env.AUUII_API_URL }}  e  {{ $env.AUUII_API_TOKEN }}
       AUUII_API_URL: ${AUUII_API_URL:-}
@@ -178,6 +184,10 @@ services:
       EVOLUTION_API_KEY: ${AUTHENTICATION_API_KEY}
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-auuii}
       SUPORTE_WHATSAPP: ${SUPORTE_WHATSAPP:-}
+      # Numero da API oficial (Meta) = o da Goby. Vazios = parte da Meta desligada.
+      META_INSTANCIA: ${META_INSTANCIA:-goby}
+      META_WHATSAPP_TOKEN: ${META_WHATSAPP_TOKEN:-}
+      META_PHONE_NUMBER_ID: ${META_PHONE_NUMBER_ID:-}
       TZ: ${TZ:-America/Sao_Paulo}
     volumes:
       - ponte_dados:/data
