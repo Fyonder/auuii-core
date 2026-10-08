@@ -1340,6 +1340,129 @@ for _a in nodes["Saudação"]["parameters"]["assignments"]["assignments"]:
     if _a["name"] == "resumo":
         _a["value"] = "={{ $('Monta contexto').first().json.resumoCorte || '' }}"
 
+# ── 19. Espera pra juntar mensagens vem do painel (dono, 07/10/2026) ──────────────────
+# "Esse tempo vamos deixar editável dentro do painel." O Wait roda ANTES do Identificar, então
+# o n8n lê o valor numa consulta rápida (GET /goby/config, backend PR #73, cache 1 min).
+# Prioridade: painel → variável NINA_ESPERA_JUNTAR → 8. Painel em 0 = não junta (não espera).
+cx, cy = nodes["Junta mensagens?"]["position"]
+add_node({
+    "parameters": {
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/config",
+        "sendHeaders": True,
+        "headerParameters": {"parameters": [{"name": "x-suporte-api-key", "value": CHAVE_NINA}]},
+        "options": {"timeout": 3000, "response": {"response": {"neverError": True}}},
+    },
+    "name": "Config da Nina", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
+    "position": [cx - 180, cy + 140], "onError": "continueRegularOutput",
+    "notesInFlow": True, "notes": "segundos pra juntar mensagens (painel da Goby)",
+    "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Config da Nina")),
+})
+for _s, _c in conn.items():
+    if _s == "Config da Nina":
+        continue
+    for _outs in _c.values():
+        for _out in _outs:
+            for _d in _out:
+                if _d["node"] == "Junta mensagens?":
+                    _d["node"] = "Config da Nina"
+conn["Config da Nina"] = {"main": [[{"node": "Junta mensagens?", "type": "main", "index": 0}]]}
+ESPERA_PAINEL = ("(() => { let v = NaN; try { v = Number($('Config da Nina').first().json.esperaJuntarSeg); } catch (e) {} "
+                 "return Number.isInteger(v) && v >= 0 && v <= 60 ? v : (Number($env.NINA_ESPERA_JUNTAR) || 8); })()")
+nodes["Junta mensagens?"]["parameters"]["conditions"]["conditions"][0]["leftValue"] = "={{ " + VEIO_DO_ZAP + " && " + ESPERA_PAINEL + " > 0 }}"
+nodes["Espera mais mensagens"]["parameters"]["amount"] = "={{ " + ESPERA_PAINEL + " }}"
+nodes["Espera mais mensagens"]["notes"] = "junta as mensagens seguidas (tempo do painel da Goby; reserva: NINA_ESPERA_JUNTAR, 8 s)"
+_u = nodes["Identificar"]["parameters"]["url"]
+nodes["Identificar"]["parameters"]["url"] = _u[:_u.index("&espera=")] + "&espera={{ " + VEIO_DO_ZAP + " ? " + ESPERA_PAINEL + " : '' }}"
+
+# ── 20. Resposta vazia da IA não é chamado; suporte não avisa a si mesmo (dono, 08/10/2026) ─
+# Visto 08:56: o dono mandou "Opa" do número do suporte, o gpt-oss gastou 260 tokens
+# raciocinando e devolveu texto VAZIO (finish_reason stop). O Interpreta resposta tratava vazio
+# como falha: "Não consegui responder agora. Um atendente já vai falar" + chamado, e o aviso
+# de "precisa de humano" foi pros 3 números do suporte (inclusive o próprio). Dono: "pq ela
+# chamou um agente pra um opa".
+# Agora: vazio → `output.vazio` sem chamado; o fluxo tenta de novo uma vez (2 s) pelo mesmo
+# roteador; se vier vazio de novo, "Desculpa, me perdi aqui. Pode mandar de novo?". Falha de
+# verdade do agente (sem `output`: Groq fora, 400) continua com chamado. E quem está em modo
+# suporte nunca dispara o aviso: "Handoff de outro numero?" falso vai pro Fim.
+_code = nodes["Interpreta resposta"]["parameters"]["jsCode"]
+_vazio_antes = "  if (!reply) { reply = 'Não consegui responder agora. Um atendente já vai falar com você por aqui.'; handoff = true; }"
+_vazio_depois = ("  // Vazio = o modelo tropeçou (raciocinou e não escreveu nada), não é caso de gente: tenta de\n"
+                 "  // novo uma vez (\"Resposta vazia?\") e, se repetir, pede pra mandar de novo. Sem chamado.\n"
+                 "  if (!reply) { return { json: { output: { reply: 'Desculpa, me perdi aqui. Pode mandar de novo?', handoff: false, resumo: null, vazio: true } } }; }")
+if _vazio_depois not in _code:
+    assert _code.count(_vazio_antes) == 1, "Interpreta resposta mudou: ajuste a etapa 19"
+    nodes["Interpreta resposta"]["parameters"]["jsCode"] = _code.replace(_vazio_antes, _vazio_depois)
+
+ix, iy = nodes["Interpreta resposta"]["position"]
+add_node(_if("Resposta vazia?", "$json.output?.vazio === true && $runIndex < 1", [ix + 110, iy + 160]))
+add_node({
+    "parameters": {"amount": 2, "unit": "seconds"},
+    "name": "Tenta de novo", "type": "n8n-nodes-base.wait", "typeVersion": 1.1,
+    "position": [ix + 290, iy + 260], "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Tenta de novo")),
+    "webhookId": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Tenta de novo/webhook")),
+    "notesInFlow": True, "notes": "IA devolveu vazio: mais uma vez",
+})
+conn["Interpreta resposta"]["main"][0] = [{"node": "Resposta vazia?", "type": "main", "index": 0}]
+conn["Resposta vazia?"] = {"main": [[{"node": "Tenta de novo", "type": "main", "index": 0}],
+                                    [{"node": "Limite da Groq?", "type": "main", "index": 0}]]}
+conn["Tenta de novo"] = {"main": [[{"node": "Suporte?", "type": "main", "index": 0}]]}
+
+# Suporte (equipe) com handoff: nem registra nem avisa a equipe — ele É a equipe.
+conn["Handoff de outro numero?"]["main"][1] = [{"node": "Fim", "type": "main", "index": 0}]
+
+# ── 21. "Meu dia e vagas": o motoboy com número verificado pergunta do dia dele (dono, 08/10/2026) ─
+# "Quando o usuário já tem número verificado, ele pode perguntar à Nina se tem corridas hoje,
+# se tem vaga, qual horário da vaga, e ela dá uma analisada." Backend PR #74: GET
+# /goby/motoboy/meu-dia só responde com o número confirmado no app por ESTE entregador
+# (verificado:false caso contrário). A Nina responde o que ele perguntou e fecha com uma
+# leitura curta do dia. Sem R$.
+add_node({
+    "parameters": {
+        "toolDescription": (
+            "O dia do entregador que esta falando, de uma vez: corridas do dia (entregues, canceladas, em aberto e as ultimas com loja e horario), "
+            "as corridas em aberto agora e as VAGAS do dia (loja, das, ate, situacao: chegou com chegouAs e atrasoMin, trabalhando, atrasado com atrasoMin, "
+            "nao_chegou, ainda_nao_comecou com comecaEmMin, transferiu com transferidaPara; recebidaDe quando recebeu a vaga de alguem). "
+            "So funciona com o numero confirmado no app da Go By: verificado false = ainda nao confirmou. Sem valores em dinheiro. "
+            "Parametro dia: vazio = hoje, ontem ou AAAA-MM-DD."
+        ),
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/motoboy/meu-dia",
+        "sendQuery": True,
+        "queryParameters": {"parameters": [
+            {"name": "telefone", "value": "={{ $('Normaliza').first().json.chatId }}"},
+            {"name": "dia", "value": "={{ $fromAI('dia', 'vazio para hoje; ontem; ou a data AAAA-MM-DD', 'string', 'hoje') }}"},
+        ]},
+        "sendHeaders": True,
+        "headerParameters": {"parameters": [{"name": "x-suporte-api-key", "value": CHAVE_NINA}]},
+        "options": {"timeout": 30000},
+    },
+    "name": "Meu dia e vagas", "type": "n8n-nodes-base.httpRequestTool", "typeVersion": 4.2,
+    "position": [nodes["Meu dia"]["position"][0], nodes["Meu dia"]["position"][1] + 200],
+    "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Meu dia e vagas")),
+})
+liga("Meu dia e vagas", "Agente Nina (entregador)", tipo="ai_tool")
+
+MEU_DIA_FERRAMENTA = (
+    "- \"Meu dia e vagas\": o dia dele de uma vez — corridas do dia, as em aberto e as vagas de hoje com horário e situação. "
+    "Use pra \"tenho vaga hoje?\", \"que horas é minha vaga?\", \"como tá meu dia?\", \"tenho corrida hoje?\", \"cheguei atrasado?\". "
+    "Pra vaga e horário de vaga, use esta antes do \"Robô da Goby\".\n"
+)
+MEU_DIA_LEITURA = (
+    "- \"Meu dia e vagas\" com verificado false: diga que, pra ver o dia e as vagas por aqui, ele precisa confirmar o número no app da Go By. "
+    "Não invente vaga nem horário. As outras ferramentas continuam valendo.\n"
+    "- \"Meu dia e vagas\" com verificado true: responda o que ele perguntou, curto, e feche com UMA frase de leitura do dia. "
+    "Ex.: \"Sua vaga na Saborê é das 18:00 às 22:30, começa em 2h.\" / \"Você está 15 min atrasado pra vaga da Holandesa (11:00).\" / "
+    "\"Hoje você já fez 4 entregas e tem 1 em aberto.\" Situação da vaga: chegou (\"chegou às HH:MM\"), trabalhando (já pegou corrida da loja), "
+    "atrasado (X min, o turno já começou), nao_chegou (o turno acabou sem chegada), ainda_nao_comecou (começa às HH:MM; comecaEmMin = quanto falta), "
+    "transferiu (\"você passou essa vaga pro <primeiro nome>\"). Sem vaga no dia: diga que não tem vaga hoje. vagas null: as vagas não responderam agora.\n"
+)
+_sm = nodes["Agente Nina (entregador)"]["parameters"]["options"]["systemMessage"]
+_i = _sm.index("- \"Meu dia\":")
+_f = _sm.index("\n", _i) + 1
+_sm = _sm[:_f] + MEU_DIA_FERRAMENTA + _sm[_f:]
+_j = _sm.index("COMO LER AS FERRAMENTAS\n") + len("COMO LER AS FERRAMENTAS\n")
+_sm = _sm[:_j] + MEU_DIA_LEITURA + _sm[_j:]
+nodes["Agente Nina (entregador)"]["parameters"]["options"]["systemMessage"] = _sm
+
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
 texto = json.dumps(f, ensure_ascii=False)
@@ -1361,7 +1484,7 @@ tools_de = lambda ag: sorted(s for s, c in conn.items() for out in c.get("ai_too
 tools_entregador = tools_de("Agente Nina (entregador)")
 tools_geral = tools_de("Agente Nina")
 tools_loja = tools_de("Agente Nina (loja)")
-assert tools_entregador == ["Buscar corrida", "Meu dia", "Minhas corridas", "Retirar pedido", "Robô da Goby"], tools_entregador
+assert tools_entregador == ["Buscar corrida", "Meu dia", "Meu dia e vagas", "Minhas corridas", "Retirar pedido", "Robô da Goby"], tools_entregador
 assert tools_geral == ["Identificar restaurante", "Me identificar"], tools_geral
 assert tools_loja == ["Identificar restaurante", "Pedido da loja", "Pedidos da loja", "Semana da loja"], tools_loja
 assert [d["node"] for d in conn["Entregador?"]["main"][1]] == ["Restaurante?"]
@@ -1369,6 +1492,10 @@ assert [d["node"] for d in conn["Mostrar digitando"]["main"][0]] == ["Resposta p
 assert [d["node"] for d in conn["Veio do WhatsApp?"]["main"][1]] == ["Resposta pronta?"]
 assert [[d["node"] for d in o] for o in conn["Resposta pronta?"]["main"]] == [["Saudação"], ["Suporte?"]]
 assert [d["node"] for d in conn["Espera o limite"]["main"][0]] == ["Suporte?"]
+assert [[d["node"] for d in o] for o in conn["Resposta vazia?"]["main"]] == [["Tenta de novo"], ["Limite da Groq?"]]
+assert [d["node"] for d in conn["Interpreta resposta"]["main"][0]] == ["Resposta vazia?"]
+assert [[d["node"] for d in o] for o in conn["Handoff de outro numero?"]["main"]] == [["Registra handoff"], ["Fim"]]
+assert "Não consegui responder agora" not in nodes["Interpreta resposta"]["parameters"]["jsCode"]
 assert [[d["node"] for d in o] for o in conn["Suporte?"]["main"]] == [["Agente Nina (suporte)"], ["Entregador?"]]
 assert tools_de("Agente Nina (suporte)") == ["Buscar cadastro", "Buscar pedido", "Corridas do entregador", "Dia dos motoboys", "Motoboy no dia", "Vagas do dia"], tools_de("Agente Nina (suporte)")
 for p_ in (ENTREGADOR, LOJA, GERAL):
@@ -1381,13 +1508,15 @@ for _t in tools_de("Agente Nina (suporte)"):
 assert "EXATAMENTE como veio" in nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]
 assert [[d["node"] for d in o] for o in conn["Chegou mensagem mais nova?"]["main"]] == [["Junta na próxima"], [ROBO_QUEM]]
 assert [[d["node"] for d in o] for o in conn["Junta mensagens?"]["main"]] == [["Espera mais mensagens"], ["Identificar"]]
+assert not any(d["node"] == "Junta mensagens?" for s_, c_ in conn.items() if s_ != "Config da Nina" for outs in c_.values() for out in outs for d in out)
+assert [d["node"] for d in conn["Config da Nina"]["main"][0]] == ["Junta mensagens?"]
 assert [d["node"] for d in conn["Normaliza"]["main"][0]] == ["Pergunta ao robô?"]
 assert [d["node"] for d in conn["Suporte configurado?"]["main"][0]] == ["Equipe: números"]
 assert [d["node"] for d in conn["Equipe: números"]["main"][0]] == ["Números do suporte"]
 assert "idBackend.suporte === true" in nodes["Monta contexto"]["parameters"]["jsCode"]
-assert [[d["node"] for d in o] for o in conn["Pergunta ao robô?"]["main"]] == [["Robô: resposta"], ["Junta mensagens?"]]
+assert [[d["node"] for d in o] for o in conn["Pergunta ao robô?"]["main"]] == [["Robô: resposta"], ["Config da Nina"]]
 assert [[d["node"] for d in o] for o in conn["Robô tratou?"]["main"]] == [["Responde pelo robô"], ["Espera SIM/NÃO?"]]
-assert [[d["node"] for d in o] for o in conn["Espera SIM/NÃO?"]["main"]] == [["Chamado SIM/NÃO"], ["Junta mensagens?"]]
+assert [[d["node"] for d in o] for o in conn["Espera SIM/NÃO?"]["main"]] == [["Chamado SIM/NÃO"], ["Config da Nina"]]
 assert [[d["node"] for d in o] for o in conn["Primeira vez?"]["main"]] == [["Passa pra equipe"], ["Esperando SIM/NÃO"]]
 assert [d["node"] for d in conn["Passa pra equipe"]["main"][0]] == ["Canal e WhatsApp?"]
 assert not {"Lembrete SIM/NÃO", "Lembra uma vez?", "Pede SIM ou NÃO"} & set(nodes)

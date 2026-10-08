@@ -65,6 +65,12 @@ services:
       ROBO_GOBY_KEY: ${ROBO_GOBY_KEY:-}
       # Nina: segundos que cada mensagem espera pra juntar as seguidas (fluxo: "Espera mais mensagens")
       NINA_ESPERA_JUNTAR: ${NINA_ESPERA_JUNTAR:-8}
+      # Avisos do robô (fila com proteção do WhatsApp, 08/10): por rodada de 1 min, por hora, e a
+      # janela em que um 2º código pro mesmo número não sai
+      AVISOS_POR_MINUTO: ${AVISOS_POR_MINUTO:-2}
+      AVISOS_POR_HORA: ${AVISOS_POR_HORA:-30}
+      AVISOS_JANELA_CODIGO_MIN: ${AVISOS_JANELA_CODIGO_MIN:-5}
+      AVISOS_EQUIPE_JANELA_MIN: ${AVISOS_EQUIPE_JANELA_MIN:-15}
       # instancia do WhatsApp e numero do suporte humano (handoff)
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-auuii}
       SUPORTE_WHATSAPP: ${SUPORTE_WHATSAPP:-}
