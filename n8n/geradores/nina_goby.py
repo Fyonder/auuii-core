@@ -1410,6 +1410,59 @@ conn["Tenta de novo"] = {"main": [[{"node": "Suporte?", "type": "main", "index":
 # Suporte (equipe) com handoff: nem registra nem avisa a equipe — ele É a equipe.
 conn["Handoff de outro numero?"]["main"][1] = [{"node": "Fim", "type": "main", "index": 0}]
 
+# ── 21. "Meu dia e vagas": o motoboy com número verificado pergunta do dia dele (dono, 08/10/2026) ─
+# "Quando o usuário já tem número verificado, ele pode perguntar à Nina se tem corridas hoje,
+# se tem vaga, qual horário da vaga, e ela dá uma analisada." Backend PR #74: GET
+# /goby/motoboy/meu-dia só responde com o número confirmado no app por ESTE entregador
+# (verificado:false caso contrário). A Nina responde o que ele perguntou e fecha com uma
+# leitura curta do dia. Sem R$.
+add_node({
+    "parameters": {
+        "toolDescription": (
+            "O dia do entregador que esta falando, de uma vez: corridas do dia (entregues, canceladas, em aberto e as ultimas com loja e horario), "
+            "as corridas em aberto agora e as VAGAS do dia (loja, das, ate, situacao: chegou com chegouAs e atrasoMin, trabalhando, atrasado com atrasoMin, "
+            "nao_chegou, ainda_nao_comecou com comecaEmMin, transferiu com transferidaPara; recebidaDe quando recebeu a vaga de alguem). "
+            "So funciona com o numero confirmado no app da Go By: verificado false = ainda nao confirmou. Sem valores em dinheiro. "
+            "Parametro dia: vazio = hoje, ontem ou AAAA-MM-DD."
+        ),
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/motoboy/meu-dia",
+        "sendQuery": True,
+        "queryParameters": {"parameters": [
+            {"name": "telefone", "value": "={{ $('Normaliza').first().json.chatId }}"},
+            {"name": "dia", "value": "={{ $fromAI('dia', 'vazio para hoje; ontem; ou a data AAAA-MM-DD', 'string', 'hoje') }}"},
+        ]},
+        "sendHeaders": True,
+        "headerParameters": {"parameters": [{"name": "x-suporte-api-key", "value": CHAVE_NINA}]},
+        "options": {"timeout": 30000},
+    },
+    "name": "Meu dia e vagas", "type": "n8n-nodes-base.httpRequestTool", "typeVersion": 4.2,
+    "position": [nodes["Meu dia"]["position"][0], nodes["Meu dia"]["position"][1] + 200],
+    "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Meu dia e vagas")),
+})
+liga("Meu dia e vagas", "Agente Nina (entregador)", tipo="ai_tool")
+
+MEU_DIA_FERRAMENTA = (
+    "- \"Meu dia e vagas\": o dia dele de uma vez — corridas do dia, as em aberto e as vagas de hoje com horário e situação. "
+    "Use pra \"tenho vaga hoje?\", \"que horas é minha vaga?\", \"como tá meu dia?\", \"tenho corrida hoje?\", \"cheguei atrasado?\". "
+    "Pra vaga e horário de vaga, use esta antes do \"Robô da Goby\".\n"
+)
+MEU_DIA_LEITURA = (
+    "- \"Meu dia e vagas\" com verificado false: diga que, pra ver o dia e as vagas por aqui, ele precisa confirmar o número no app da Go By. "
+    "Não invente vaga nem horário. As outras ferramentas continuam valendo.\n"
+    "- \"Meu dia e vagas\" com verificado true: responda o que ele perguntou, curto, e feche com UMA frase de leitura do dia. "
+    "Ex.: \"Sua vaga na Saborê é das 18:00 às 22:30, começa em 2h.\" / \"Você está 15 min atrasado pra vaga da Holandesa (11:00).\" / "
+    "\"Hoje você já fez 4 entregas e tem 1 em aberto.\" Situação da vaga: chegou (\"chegou às HH:MM\"), trabalhando (já pegou corrida da loja), "
+    "atrasado (X min, o turno já começou), nao_chegou (o turno acabou sem chegada), ainda_nao_comecou (começa às HH:MM; comecaEmMin = quanto falta), "
+    "transferiu (\"você passou essa vaga pro <primeiro nome>\"). Sem vaga no dia: diga que não tem vaga hoje. vagas null: as vagas não responderam agora.\n"
+)
+_sm = nodes["Agente Nina (entregador)"]["parameters"]["options"]["systemMessage"]
+_i = _sm.index("- \"Meu dia\":")
+_f = _sm.index("\n", _i) + 1
+_sm = _sm[:_f] + MEU_DIA_FERRAMENTA + _sm[_f:]
+_j = _sm.index("COMO LER AS FERRAMENTAS\n") + len("COMO LER AS FERRAMENTAS\n")
+_sm = _sm[:_j] + MEU_DIA_LEITURA + _sm[_j:]
+nodes["Agente Nina (entregador)"]["parameters"]["options"]["systemMessage"] = _sm
+
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
 texto = json.dumps(f, ensure_ascii=False)
@@ -1431,7 +1484,7 @@ tools_de = lambda ag: sorted(s for s, c in conn.items() for out in c.get("ai_too
 tools_entregador = tools_de("Agente Nina (entregador)")
 tools_geral = tools_de("Agente Nina")
 tools_loja = tools_de("Agente Nina (loja)")
-assert tools_entregador == ["Buscar corrida", "Meu dia", "Minhas corridas", "Retirar pedido", "Robô da Goby"], tools_entregador
+assert tools_entregador == ["Buscar corrida", "Meu dia", "Meu dia e vagas", "Minhas corridas", "Retirar pedido", "Robô da Goby"], tools_entregador
 assert tools_geral == ["Identificar restaurante", "Me identificar"], tools_geral
 assert tools_loja == ["Identificar restaurante", "Pedido da loja", "Pedidos da loja", "Semana da loja"], tools_loja
 assert [d["node"] for d in conn["Entregador?"]["main"][1]] == ["Restaurante?"]
