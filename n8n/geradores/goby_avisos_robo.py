@@ -19,7 +19,8 @@ continuam, mas se o usuário pediu 2 vezes só manda 1, e espera um tempo de pro
 Agora nada sai direto: tudo entra numa fila (dados estáticos do fluxo) e a cada minuto:
   - CÓDIGO: pediu de novo antes de sair → fica só o mais novo; já saiu um código pra esse
     número há menos de AVISOS_JANELA_CODIGO_MIN (5) → o novo não sai. Vence em 10 min na fila.
-  - RITMO: no máximo AVISOS_POR_MINUTO (2) por rodada, 20 s entre eles, e AVISOS_POR_HORA (30).
+  - RITMO: no máximo AVISOS_POR_MINUTO (2) por rodada, 15 s entre eles, e AVISOS_POR_HORA (30).
+    Cada rodada cabe em 46 s no pior caso (tempos limite curtos): rodadas não se sobrepõem.
   - ORDEM: código, reserva, os outros, e por último os alertas da equipe.
   - EQUIPE: os alertas na fila pro mesmo número da equipe saem numa mensagem só.
   - Tudo que não sai (vencido, repetido, sem telefone) volta pro robô como
@@ -49,11 +50,18 @@ ID = 'gobyAvisosRobo01'
 
 ROBO_URL = "={{ $env.ROBO_GOBY_URL || 'https://emcynyuzuafovconujwo.supabase.co/functions/v1/robo-goby' }}"
 ROBO_HEADERS = {"parameters": [{"name": "x-api-key", "value": "={{ $env.ROBO_GOBY_KEY }}"}]}
-INTERVALO_MS = 20000  # entre uma mensagem e outra
+# Uma rodada TEM que caber em 1 minuto: a fila é lida no começo e gravada no fim; se a rodada
+# seguinte começar antes, ela parte da fila velha e manda o mesmo código de novo. Pior caso:
+# busca 10 + envio 8 + intervalo 15 + envio 8 + confirma 5 = 46 s (revisão de 08/10).
+INTERVALO_MS = 15000   # entre uma mensagem e outra
+TIMEOUT_BUSCA_MS = 10000
+TIMEOUT_ENVIO_MS = 8000
+TIMEOUT_CONFIRMA_MS = 5000
 
 JS_FILA = r"""// Fila com proteção do WhatsApp (dono, 08/10/2026): o número caiu por spam com 48 códigos em 1 h.
 const num = (k, d) => { const v = Number($env[k]); return Number.isFinite(v) && v >= 0 ? v : d; };
-const POR_RODADA = num('AVISOS_POR_MINUTO', 2);
+// No máximo 2: mais que isso a rodada passa de 1 min e a seguinte repete código (a variável só diminui).
+const POR_RODADA = Math.min(num('AVISOS_POR_MINUTO', 2), 2);
 const POR_HORA = num('AVISOS_POR_HORA', 30);
 const JANELA_CODIGO_MS = num('AVISOS_JANELA_CODIGO_MIN', 5) * 60000;
 const VIDA_MS = { codigo: 10 * 60000, reserva: 25 * 60000, equipe: 30 * 60000 };
@@ -171,7 +179,7 @@ def montar():
                 "queryParameters": {"parameters": [{"name": "rota", "value": "avisos"}]},
                 "sendHeaders": True,
                 "headerParameters": ROBO_HEADERS,
-                "options": {"timeout": 15000, "response": {"response": {"neverError": True}}},
+                "options": {"timeout": TIMEOUT_BUSCA_MS, "response": {"response": {"neverError": True}}},
             },
             "name": "Robô: avisos", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
             "position": [220, 0], "onError": "continueRegularOutput",
@@ -201,13 +209,13 @@ def montar():
                 "sendBody": True,
                 "specifyBody": "json",
                 "jsonBody": "={{ JSON.stringify({ number: $json.telefone, text: $json.mensagem }) }}",
-                "options": {"timeout": 20000,
+                "options": {"timeout": TIMEOUT_ENVIO_MS,
                             "batching": {"batch": {"batchSize": 1, "batchInterval": INTERVALO_MS}},
                             "response": {"response": {"neverError": True, "fullResponse": True}}},
             },
             "name": "Manda no WhatsApp", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
             "position": [880, -100], "onError": "continueRegularOutput",
-            "notesInFlow": True, "notes": "um por vez, 20 s entre eles; texto como veio", "id": _id(6),
+            "notesInFlow": True, "notes": "um por vez, 15 s entre eles; texto como veio", "id": _id(6),
         },
         {
             "parameters": {"jsCode": JS_RESULTADO},
@@ -228,7 +236,7 @@ def montar():
                 "sendBody": True,
                 "specifyBody": "json",
                 "jsonBody": CORPO_RESULTADO,
-                "options": {"timeout": 10000, "response": {"response": {"neverError": True}}},
+                "options": {"timeout": TIMEOUT_CONFIRMA_MS, "response": {"response": {"neverError": True}}},
             },
             "name": "Robô: confirma", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
             "position": [1320, 0], "onError": "continueRegularOutput",
@@ -279,5 +287,10 @@ if __name__ == '__main__':
     _manda = next(n for n in f["nodes"] if n["name"] == "Manda no WhatsApp")
     assert _manda["parameters"]["options"]["batching"]["batch"]["batchInterval"] >= 15000
     assert f["settings"]["saveDataSuccessExecution"] == "all"
+    # Rodada < 60 s no pior caso (senão duas rodadas leem a mesma fila e repetem o código).
+    _t = {n["name"]: n["parameters"].get("options", {}).get("timeout", 0) for n in f["nodes"]}
+    _por_rodada = 2
+    _pior = _t["Robô: avisos"] + _por_rodada * _t["Manda no WhatsApp"] + (_por_rodada - 1) * INTERVALO_MS + _t["Robô: confirma"]
+    assert _pior < 55000, f"rodada pode passar de 1 min: {_pior} ms"
     ARQ.write_text(json.dumps(f, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"ok: {ARQ.name} ({len(f['nodes'])} nós, id {ID})")
