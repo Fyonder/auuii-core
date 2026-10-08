@@ -1374,6 +1374,42 @@ nodes["Espera mais mensagens"]["notes"] = "junta as mensagens seguidas (tempo do
 _u = nodes["Identificar"]["parameters"]["url"]
 nodes["Identificar"]["parameters"]["url"] = _u[:_u.index("&espera=")] + "&espera={{ " + VEIO_DO_ZAP + " ? " + ESPERA_PAINEL + " : '' }}"
 
+# ── 19. Resposta vazia da IA não é chamado; suporte não avisa a si mesmo (dono, 08/10/2026) ─
+# Visto 08:56: o dono mandou "Opa" do número do suporte, o gpt-oss gastou 260 tokens
+# raciocinando e devolveu texto VAZIO (finish_reason stop). O Interpreta resposta tratava vazio
+# como falha: "Não consegui responder agora. Um atendente já vai falar" + chamado, e o aviso
+# de "precisa de humano" foi pros 3 números do suporte (inclusive o próprio). Dono: "pq ela
+# chamou um agente pra um opa".
+# Agora: vazio → `output.vazio` sem chamado; o fluxo tenta de novo uma vez (2 s) pelo mesmo
+# roteador; se vier vazio de novo, "Desculpa, me perdi aqui. Pode mandar de novo?". Falha de
+# verdade do agente (sem `output`: Groq fora, 400) continua com chamado. E quem está em modo
+# suporte nunca dispara o aviso: "Handoff de outro numero?" falso vai pro Fim.
+_code = nodes["Interpreta resposta"]["parameters"]["jsCode"]
+_vazio_antes = "  if (!reply) { reply = 'Não consegui responder agora. Um atendente já vai falar com você por aqui.'; handoff = true; }"
+_vazio_depois = ("  // Vazio = o modelo tropeçou (raciocinou e não escreveu nada), não é caso de gente: tenta de\n"
+                 "  // novo uma vez (\"Resposta vazia?\") e, se repetir, pede pra mandar de novo. Sem chamado.\n"
+                 "  if (!reply) { return { json: { output: { reply: 'Desculpa, me perdi aqui. Pode mandar de novo?', handoff: false, resumo: null, vazio: true } } }; }")
+if _vazio_depois not in _code:
+    assert _code.count(_vazio_antes) == 1, "Interpreta resposta mudou: ajuste a etapa 19"
+    nodes["Interpreta resposta"]["parameters"]["jsCode"] = _code.replace(_vazio_antes, _vazio_depois)
+
+ix, iy = nodes["Interpreta resposta"]["position"]
+add_node(_if("Resposta vazia?", "$json.output?.vazio === true && $runIndex < 1", [ix + 110, iy + 160]))
+add_node({
+    "parameters": {"amount": 2, "unit": "seconds"},
+    "name": "Tenta de novo", "type": "n8n-nodes-base.wait", "typeVersion": 1.1,
+    "position": [ix + 290, iy + 260], "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Tenta de novo")),
+    "webhookId": str(uuid.uuid5(uuid.NAMESPACE_URL, "nina/Tenta de novo/webhook")),
+    "notesInFlow": True, "notes": "IA devolveu vazio: mais uma vez",
+})
+conn["Interpreta resposta"]["main"][0] = [{"node": "Resposta vazia?", "type": "main", "index": 0}]
+conn["Resposta vazia?"] = {"main": [[{"node": "Tenta de novo", "type": "main", "index": 0}],
+                                    [{"node": "Limite da Groq?", "type": "main", "index": 0}]]}
+conn["Tenta de novo"] = {"main": [[{"node": "Suporte?", "type": "main", "index": 0}]]}
+
+# Suporte (equipe) com handoff: nem registra nem avisa a equipe — ele É a equipe.
+conn["Handoff de outro numero?"]["main"][1] = [{"node": "Fim", "type": "main", "index": 0}]
+
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
 texto = json.dumps(f, ensure_ascii=False)
@@ -1403,6 +1439,10 @@ assert [d["node"] for d in conn["Mostrar digitando"]["main"][0]] == ["Resposta p
 assert [d["node"] for d in conn["Veio do WhatsApp?"]["main"][1]] == ["Resposta pronta?"]
 assert [[d["node"] for d in o] for o in conn["Resposta pronta?"]["main"]] == [["Saudação"], ["Suporte?"]]
 assert [d["node"] for d in conn["Espera o limite"]["main"][0]] == ["Suporte?"]
+assert [[d["node"] for d in o] for o in conn["Resposta vazia?"]["main"]] == [["Tenta de novo"], ["Limite da Groq?"]]
+assert [d["node"] for d in conn["Interpreta resposta"]["main"][0]] == ["Resposta vazia?"]
+assert [[d["node"] for d in o] for o in conn["Handoff de outro numero?"]["main"]] == [["Registra handoff"], ["Fim"]]
+assert "Não consegui responder agora" not in nodes["Interpreta resposta"]["parameters"]["jsCode"]
 assert [[d["node"] for d in o] for o in conn["Suporte?"]["main"]] == [["Agente Nina (suporte)"], ["Entregador?"]]
 assert tools_de("Agente Nina (suporte)") == ["Buscar cadastro", "Buscar pedido", "Corridas do entregador", "Dia dos motoboys", "Motoboy no dia", "Vagas do dia"], tools_de("Agente Nina (suporte)")
 for p_ in (ENTREGADOR, LOJA, GERAL):

@@ -580,7 +580,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// O agente responde TEXTO; aqui vira { output: { reply, handoff } } sempre.\n// handoff = a marca [SUPORTE] (ou [HANDOFF]) no texto, que e removida da resposta.\n// Se o modelo mesmo assim devolver JSON {reply, handoff}, tambem e aceito.\nconst MARCA = /\\[\\s*(SUPORTE|HANDOFF)\\s*\\]/gi;\n\n// O gpt-oss-120b as vezes despeja entulho antes da resposta (exec 263: 207 tokens\n// de saida para 60 caracteres uteis). Isto descarta enfeite, nunca reescreve texto.\nfunction limpar(s) {\n  let t = String(s ?? '').replace(/[   ​]/g, ' ');\n\n  // 3+ quebras seguidas nao aparecem em resposta legitima: separa entulho da resposta\n  const blocos = t.split(/\\n{3,}/).map((b) => b.trim()).filter(Boolean);\n  if (blocos.length > 1) t = blocos[blocos.length - 1];\n\n  // O modelo as vezes despeja o raciocinio (em ingles) colado na resposta.\n  // Assinatura: frases de meta-comentario. O corte e no ultimo ponto/dois-pontos\n  // GRUDADO numa maiuscula — pontuacao sem espaco depois nao acontece em texto normal.\n  const RACIOCINIO = /\\b(the assistant|should respond|need to|keep short|garbled|nonsense|one emoji|we (?:need|should)|user (?:is|wants|asked)|let'?s |i should)\\b/i;\n  if (RACIOCINIO.test(t)) {\n    const grudado = [...t.matchAll(/[.!?:](?=[A-ZÀ-Ý])/g)];\n    if (grudado.length) {\n      t = t.slice(grudado[grudado.length - 1].index + 1);\n    } else {\n      // separado por espaco: descarta as frases iniciais que sao meta-comentario\n      const frases = t.split(/(?<=[.!?])\\s+/);\n      let i = 0;\n      while (i < frases.length - 1 && RACIOCINIO.test(frases[i])) i++;\n      if (i > 0) t = frases.slice(i).join(' ');\n    }\n  }\n\n  return t\n    .replace(/^[\\s.*_~\\-=…·•]{3,}/, '')\n    .replace(/…{2,}|\\.{4,}|\\*{2,}|_{3,}|~{3,}/g, '')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .replace(/[ \\t]{2,}/g, ' ')\n    .replace(/[ \\t]+([.,!?])/g, '$1')\n    .trim();\n}\nreturn $input.all().map((item) => {\n  if (item.json.output === undefined) {\n    // sem `output` = o no do agente nao produziu resposta (falhou e seguiu com onError=continue)\n    // o no do agente falhou (modelo/Groq fora, 400, etc.): nao deixa o usuario sem resposta\n    return { json: { output: { reply: 'Tive um problema pra responder agora. Um atendente já vai falar com você por aqui.', handoff: true, resumo: null }, erroAgente: String(item.json.error?.message || item.json.error || 'agente sem output').slice(0, 300) } };\n  }\n  let raw = item.json.output;\n  // Modo suporte: a ferramenta já devolve a mensagem pronta (`texto`). Se a IA repetiu esse\n  // texto no meio de raciocínio vazado, vai só o texto, exatamente como a ferramenta mandou.\n  const passos = Array.isArray(item.json.intermediateSteps) ? item.json.intermediateSteps : [];\n  const prontos = passos.map((p) => {\n    let o = p && p.observation;\n    if (typeof o === 'string') { try { o = JSON.parse(o); } catch (e) { o = null; } }\n    if (Array.isArray(o)) o = o[0];\n    return o && typeof o.texto === 'string' && o.texto.trim() ? o.texto : null;\n  }).filter(Boolean);\n  const umaLinha = (t) => String(t || '').replace(/\\s+/g, ' ').trim();\n  const pronto = typeof raw === 'string' ? prontos.reverse().find((t) => umaLinha(raw).includes(umaLinha(t))) : null;\n  if (pronto) raw = pronto;\n  let reply = null, handoff = false;\n  if (raw && typeof raw === 'object' && typeof raw.reply === 'string') {\n    reply = raw.reply; handoff = raw.handoff === true;\n  } else {\n    let s = String(raw ?? '').trim().replace(/^```(?:json)?\\s*/i, '').replace(/```\\s*$/, '').trim();\n    const i = s.indexOf('{'), j = s.lastIndexOf('}');\n    if (i === 0 && j > i) {\n      try { const o = JSON.parse(s.slice(i, j + 1)); if (o && typeof o.reply === 'string') { reply = o.reply; handoff = o.handoff === true; } } catch (e) { /* nao era JSON */ }\n    }\n    if (reply === null) reply = s;\n  }\n  // Triagem: a ultima linha \"RESUMO: pedido X · motivo\" vai pro painel (handoffMotivo), nao pro contato.\n  // Extraida ANTES do limpar(): ele descarta blocos separados por 3+ quebras.\n  let resumo = null;\n  const mRes = reply.match(/^[ \\t]*RESUMO\\s*:\\s*(.+?)\\s*$/im);\n  if (mRes) { resumo = mRes[1].replace(MARCA, '').trim().slice(0, 300) || null; reply = reply.replace(mRes[0], ''); }\n  if (MARCA.test(reply)) { handoff = true; }\n  // Só OFERECEU atendente (pergunta no fim) e marcou: espera a pessoa aceitar.\n  if (handoff && /(quer|prefere|gostaria de)\\s[^?]*atendente[^?]*\\?\\s*$/i.test(reply.replace(MARCA, '').replace(/^\\s*RESUMO\\s*:.*$/im, '').trim())) { handoff = false; resumo = null; }\n  // Prometeu atendente e esqueceu a marca: chama mesmo assim (a promessa tem que valer).\n  if (!handoff && /atendente\\s+(j[aá]\\s+)?vai\\s+(falar|cuidar|te\\s+chamar|te\\s+atender|resolver|entrar)/i.test(reply) && !/j[aá]\\s+foi\\s+avisad/i.test(reply)) { handoff = true; }\n  reply = limpar(reply.replace(MARCA, '')).replace(/[ \t]{2,}/g, ' ').replace(/[ \t]+([.,!?])/g, '$1').trim();\n  if (!reply) { reply = 'Não consegui responder agora. Um atendente já vai falar com você por aqui.'; handoff = true; }\n  return { json: { output: { reply, handoff, resumo } } };\n});\n"
+        "jsCode": "// O agente responde TEXTO; aqui vira { output: { reply, handoff } } sempre.\n// handoff = a marca [SUPORTE] (ou [HANDOFF]) no texto, que e removida da resposta.\n// Se o modelo mesmo assim devolver JSON {reply, handoff}, tambem e aceito.\nconst MARCA = /\\[\\s*(SUPORTE|HANDOFF)\\s*\\]/gi;\n\n// O gpt-oss-120b as vezes despeja entulho antes da resposta (exec 263: 207 tokens\n// de saida para 60 caracteres uteis). Isto descarta enfeite, nunca reescreve texto.\nfunction limpar(s) {\n  let t = String(s ?? '').replace(/[   ​]/g, ' ');\n\n  // 3+ quebras seguidas nao aparecem em resposta legitima: separa entulho da resposta\n  const blocos = t.split(/\\n{3,}/).map((b) => b.trim()).filter(Boolean);\n  if (blocos.length > 1) t = blocos[blocos.length - 1];\n\n  // O modelo as vezes despeja o raciocinio (em ingles) colado na resposta.\n  // Assinatura: frases de meta-comentario. O corte e no ultimo ponto/dois-pontos\n  // GRUDADO numa maiuscula — pontuacao sem espaco depois nao acontece em texto normal.\n  const RACIOCINIO = /\\b(the assistant|should respond|need to|keep short|garbled|nonsense|one emoji|we (?:need|should)|user (?:is|wants|asked)|let'?s |i should)\\b/i;\n  if (RACIOCINIO.test(t)) {\n    const grudado = [...t.matchAll(/[.!?:](?=[A-ZÀ-Ý])/g)];\n    if (grudado.length) {\n      t = t.slice(grudado[grudado.length - 1].index + 1);\n    } else {\n      // separado por espaco: descarta as frases iniciais que sao meta-comentario\n      const frases = t.split(/(?<=[.!?])\\s+/);\n      let i = 0;\n      while (i < frases.length - 1 && RACIOCINIO.test(frases[i])) i++;\n      if (i > 0) t = frases.slice(i).join(' ');\n    }\n  }\n\n  return t\n    .replace(/^[\\s.*_~\\-=…·•]{3,}/, '')\n    .replace(/…{2,}|\\.{4,}|\\*{2,}|_{3,}|~{3,}/g, '')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .replace(/[ \\t]{2,}/g, ' ')\n    .replace(/[ \\t]+([.,!?])/g, '$1')\n    .trim();\n}\nreturn $input.all().map((item) => {\n  if (item.json.output === undefined) {\n    // sem `output` = o no do agente nao produziu resposta (falhou e seguiu com onError=continue)\n    // o no do agente falhou (modelo/Groq fora, 400, etc.): nao deixa o usuario sem resposta\n    return { json: { output: { reply: 'Tive um problema pra responder agora. Um atendente já vai falar com você por aqui.', handoff: true, resumo: null }, erroAgente: String(item.json.error?.message || item.json.error || 'agente sem output').slice(0, 300) } };\n  }\n  let raw = item.json.output;\n  // Modo suporte: a ferramenta já devolve a mensagem pronta (`texto`). Se a IA repetiu esse\n  // texto no meio de raciocínio vazado, vai só o texto, exatamente como a ferramenta mandou.\n  const passos = Array.isArray(item.json.intermediateSteps) ? item.json.intermediateSteps : [];\n  const prontos = passos.map((p) => {\n    let o = p && p.observation;\n    if (typeof o === 'string') { try { o = JSON.parse(o); } catch (e) { o = null; } }\n    if (Array.isArray(o)) o = o[0];\n    return o && typeof o.texto === 'string' && o.texto.trim() ? o.texto : null;\n  }).filter(Boolean);\n  const umaLinha = (t) => String(t || '').replace(/\\s+/g, ' ').trim();\n  const pronto = typeof raw === 'string' ? prontos.reverse().find((t) => umaLinha(raw).includes(umaLinha(t))) : null;\n  if (pronto) raw = pronto;\n  let reply = null, handoff = false;\n  if (raw && typeof raw === 'object' && typeof raw.reply === 'string') {\n    reply = raw.reply; handoff = raw.handoff === true;\n  } else {\n    let s = String(raw ?? '').trim().replace(/^```(?:json)?\\s*/i, '').replace(/```\\s*$/, '').trim();\n    const i = s.indexOf('{'), j = s.lastIndexOf('}');\n    if (i === 0 && j > i) {\n      try { const o = JSON.parse(s.slice(i, j + 1)); if (o && typeof o.reply === 'string') { reply = o.reply; handoff = o.handoff === true; } } catch (e) { /* nao era JSON */ }\n    }\n    if (reply === null) reply = s;\n  }\n  // Triagem: a ultima linha \"RESUMO: pedido X · motivo\" vai pro painel (handoffMotivo), nao pro contato.\n  // Extraida ANTES do limpar(): ele descarta blocos separados por 3+ quebras.\n  let resumo = null;\n  const mRes = reply.match(/^[ \\t]*RESUMO\\s*:\\s*(.+?)\\s*$/im);\n  if (mRes) { resumo = mRes[1].replace(MARCA, '').trim().slice(0, 300) || null; reply = reply.replace(mRes[0], ''); }\n  if (MARCA.test(reply)) { handoff = true; }\n  // Só OFERECEU atendente (pergunta no fim) e marcou: espera a pessoa aceitar.\n  if (handoff && /(quer|prefere|gostaria de)\\s[^?]*atendente[^?]*\\?\\s*$/i.test(reply.replace(MARCA, '').replace(/^\\s*RESUMO\\s*:.*$/im, '').trim())) { handoff = false; resumo = null; }\n  // Prometeu atendente e esqueceu a marca: chama mesmo assim (a promessa tem que valer).\n  if (!handoff && /atendente\\s+(j[aá]\\s+)?vai\\s+(falar|cuidar|te\\s+chamar|te\\s+atender|resolver|entrar)/i.test(reply) && !/j[aá]\\s+foi\\s+avisad/i.test(reply)) { handoff = true; }\n  reply = limpar(reply.replace(MARCA, '')).replace(/[ \t]{2,}/g, ' ').replace(/[ \t]+([.,!?])/g, '$1').trim();\n  // Vazio = o modelo tropeçou (raciocinou e não escreveu nada), não é caso de gente: tenta de\n  // novo uma vez (\"Resposta vazia?\") e, se repetir, pede pra mandar de novo. Sem chamado.\n  if (!reply) { return { json: { output: { reply: 'Desculpa, me perdi aqui. Pode mandar de novo?', handoff: false, resumo: null, vazio: true } } }; }\n  return { json: { output: { reply, handoff, resumo } } };\n});\n"
       },
       "name": "Interpreta resposta",
       "type": "n8n-nodes-base.code",
@@ -2818,6 +2818,57 @@
       "notesInFlow": true,
       "notes": "segundos pra juntar mensagens (painel da Goby)",
       "id": "b16339f2-a602-58fa-83af-985595549b0c"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Resposta vazia?",
+              "leftValue": "={{ $json.output?.vazio === true && $runIndex < 1 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Resposta vazia?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -4162,
+        -368
+      ],
+      "id": "f89cee4b-bfc8-5d2b-bb44-124e4294846f"
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "name": "Tenta de novo",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -3982,
+        -268
+      ],
+      "id": "c4598298-206d-5b49-b97d-334e24204b0b",
+      "webhookId": "ab9b6207-57ec-5e4e-8ed6-9e6c54656fc1",
+      "notesInFlow": true,
+      "notes": "IA devolveu vazio: mais uma vez"
     }
   ],
   "connections": {
@@ -2993,7 +3044,7 @@
       "main": [
         [
           {
-            "node": "Limite da Groq?",
+            "node": "Resposta vazia?",
             "type": "main",
             "index": 0
           }
@@ -3178,7 +3229,7 @@
         ],
         [
           {
-            "node": "Suporte configurado?",
+            "node": "Fim",
             "type": "main",
             "index": 0
           }
@@ -3789,6 +3840,35 @@
         [
           {
             "node": "Junta mensagens?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resposta vazia?": {
+      "main": [
+        [
+          {
+            "node": "Tenta de novo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Limite da Groq?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tenta de novo": {
+      "main": [
+        [
+          {
+            "node": "Suporte?",
             "type": "main",
             "index": 0
           }
