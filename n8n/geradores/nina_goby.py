@@ -1374,7 +1374,7 @@ nodes["Espera mais mensagens"]["notes"] = "junta as mensagens seguidas (tempo do
 _u = nodes["Identificar"]["parameters"]["url"]
 nodes["Identificar"]["parameters"]["url"] = _u[:_u.index("&espera=")] + "&espera={{ " + VEIO_DO_ZAP + " ? " + ESPERA_PAINEL + " : '' }}"
 
-# ── 19. Resposta vazia da IA não é chamado; suporte não avisa a si mesmo (dono, 08/10/2026) ─
+# ── 20. Resposta vazia da IA não é chamado; suporte não avisa a si mesmo (dono, 08/10/2026) ─
 # Visto 08:56: o dono mandou "Opa" do número do suporte, o gpt-oss gastou 260 tokens
 # raciocinando e devolveu texto VAZIO (finish_reason stop). O Interpreta resposta tratava vazio
 # como falha: "Não consegui responder agora. Um atendente já vai falar" + chamado, e o aviso
