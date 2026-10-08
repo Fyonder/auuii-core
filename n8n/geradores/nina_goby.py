@@ -204,6 +204,14 @@ if (id.primeiroContato !== false) {{
     : 'SAUDAÇÃO: se não há conversa anterior no seu histórico, comece com "' + oi + '" (e, se a pessoa não disse o que precisa, pergunte "O que você precisa?"). Se já conversaram, não cumprimente de novo.';
 }} else if (id.primeiroContato === false) {{
   blocoInicio = 'VOCÊS JÁ CONVERSARAM HOJE: não cumprimente de novo nem se apresente; vá direto ao ponto.';
+  // Só "oi" de novo no mesmo dia (dono, 08/10/2026: "ela tá se perdendo em toda mensagem"): a IA,
+  // proibida de cumprimentar de novo, devolvia texto vazio e saía "me perdi aqui". Resposta fixa,
+  // curta, sem se apresentar.
+  if (soCumprimento && !blocoPendentes && id.aguardandoHumano !== true) {{
+    if (id.perfil === 'suporte') saudacaoPronta = 'Oi! Pode mandar: nome ou código do entregador, número do pedido, "vagas hoje" ou "quem não chegou".';
+    else if (id.perfil === 'restaurante') saudacaoPronta = 'Oi! O que vocês precisam?';
+    else if (id.perfil === 'motoboy' || id.perfil === 'equipe') saudacaoPronta = 'Oi' + ((nomeCadastro || nomeZap) ? ', ' + (nomeCadastro || nomeZap) : '') + '! O que você precisa?';
+  }}
 }}
 
 // ── Menu pra número desconhecido (dono, 04/10/2026: "1 pra motoboy, 2 pra restaurante,
