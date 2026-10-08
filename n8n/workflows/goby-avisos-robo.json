@@ -66,49 +66,30 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "tem1",
-              "leftValue": "={{ $json.ok === true && Array.isArray($json.avisos) && $json.avisos.length > 0 }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
+        "jsCode": "// Fila com proteção do WhatsApp (dono, 08/10/2026): o número caiu por spam com 48 códigos em 1 h.\nconst num = (k, d) => { const v = Number($env[k]); return Number.isFinite(v) && v >= 0 ? v : d; };\nconst POR_RODADA = num('AVISOS_POR_MINUTO', 2);\nconst POR_HORA = num('AVISOS_POR_HORA', 30);\nconst JANELA_CODIGO_MS = num('AVISOS_JANELA_CODIGO_MIN', 5) * 60000;\nconst VIDA_MS = { codigo: 10 * 60000, reserva: 25 * 60000, equipe: 30 * 60000 };\nconst VIDA_PADRAO = 60 * 60000;\nconst prioridade = (t) => (t === 'codigo' ? 0 : t === 'reserva' ? 1 : t === 'equipe' ? 3 : 2);\nconst MAX_TEXTO = 3500;\n\nconst agora = Date.now();\nconst st = $getWorkflowStaticData('global');\nlet fila = Array.isArray(st.fila) ? st.fila : [];\nconst enviados = (Array.isArray(st.enviados) ? st.enviados : []).filter((e) => agora - e.em < 3600000);\nconst descartar = [];\nconst tira = (a, erro) => descartar.push({ id: a.id, ok: false, erro });\nconst tel = (t) => String(t || '').replace(/\\D/g, '');\n\n// 1) Os novos entram na fila (cada aviso vem uma vez só do robô).\nconst r = $('Robô: avisos').first().json || {};\nconst novos = r.ok === true && Array.isArray(r.avisos) ? r.avisos : [];\nnovos.forEach((a, i) => {\n  const t = tel(a.telefone);\n  const m = String(a.mensagem || '');\n  if (!t) return tira(a, 'aviso sem telefone');\n  if (!m.trim()) return tira(a, 'aviso sem mensagem');\n  if (fila.some((f) => f.id === a.id)) return;\n  const exp = Date.parse(a.expira_em || a.expiraEm || '');\n  const criado = Date.parse(a.criado_em || a.criadoEm || '');\n  fila.push({ id: a.id, telefone: t, mensagem: m, tipo: String(a.tipo || 'outro'), em: agora,\n    criado: Number.isFinite(criado) ? criado : agora + i, expira: Number.isFinite(exp) ? exp : null });\n});\n\n// 2) Vencidos saem (código de 10 min parado na fila não serve pra nada).\nfila = fila.filter((f) => {\n  const vida = VIDA_MS[f.tipo] ?? VIDA_PADRAO;\n  if ((f.expira && f.expira < agora) || agora - f.em > vida) { tira(f, 'venceu esperando na fila de proteção do WhatsApp'); return false; }\n  return true;\n});\n\n// 3) Código: um só por número.\nconst maisNovo = new Map();\nfor (const f of fila) if (f.tipo === 'codigo' && (!maisNovo.has(f.telefone) || f.criado >= maisNovo.get(f.telefone).criado)) maisNovo.set(f.telefone, f);\nfila = fila.filter((f) => {\n  if (f.tipo !== 'codigo') return true;\n  const ja = enviados.find((e) => e.tipo === 'codigo' && e.telefone === f.telefone && agora - e.em < JANELA_CODIGO_MS);\n  if (ja) { tira(f, 'já saiu um código pra este número há ' + Math.max(1, Math.round((agora - ja.em) / 60000)) + ' min; não manda outro (proteção do WhatsApp)'); return false; }\n  if (maisNovo.get(f.telefone) !== f) { tira(f, 'pediu de novo antes de sair: vai só o código mais novo'); return false; }\n  return true;\n});\n\n// 4) O que sai nesta rodada: prioridade, depois o mais antigo; alertas da equipe juntos.\nfila.sort((a, b) => prioridade(a.tipo) - prioridade(b.tipo) || a.em - b.em || a.criado - b.criado);\nconst enviar = [];\nfor (const f of [...fila]) {\n  if (enviar.length >= POR_RODADA || enviados.length >= POR_HORA) break;\n  if (!fila.includes(f)) continue;\n  let envio;\n  if (f.tipo === 'equipe') {\n    let texto = '';\n    const ids = [];\n    for (const g of fila.filter((x) => x.tipo === 'equipe' && x.telefone === f.telefone)) {\n      const mais = (texto ? '\\n\\n' : '') + g.mensagem;\n      if (texto && (texto + mais).length > MAX_TEXTO) break;\n      texto += mais;\n      ids.push(g.id);\n    }\n    envio = { ids, telefone: f.telefone, mensagem: texto, tipo: 'equipe' };\n  } else {\n    envio = { ids: [f.id], telefone: f.telefone, mensagem: f.mensagem, tipo: f.tipo };\n  }\n  enviar.push(envio);\n  fila = fila.filter((g) => !envio.ids.includes(g.id));\n  enviados.push({ em: agora, telefone: f.telefone, tipo: f.tipo });\n}\n\nst.fila = fila;\nst.enviados = enviados;\nreturn [{ json: { enviar, descartar, naFila: fila.length, naUltimaHora: enviados.length } }];\n"
       },
-      "name": "Tem aviso?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
+      "name": "Fila com proteção",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         440,
         0
       ],
+      "notesInFlow": true,
+      "notes": "1 código por número, 2/min, 30/h; equipe junta",
       "id": "a7150b0b-0000-4a00-9000-000000000003"
     },
     {
       "parameters": {
-        "fieldToSplitOut": "avisos",
+        "fieldToSplitOut": "enviar",
         "options": {}
       },
-      "name": "Um item por aviso",
+      "name": "Um por envio",
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
       "position": [
         660,
-        -20
+        -100
       ],
       "id": "a7150b0b-0000-4a00-9000-000000000004"
     },
@@ -131,13 +112,13 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ number: String($json.telefone || '').replace(/\\D/g, ''), text: String($json.mensagem || '') }) }}",
+        "jsonBody": "={{ JSON.stringify({ number: $json.telefone, text: $json.mensagem }) }}",
         "options": {
           "timeout": 20000,
           "batching": {
             "batch": {
               "batchSize": 1,
-              "batchInterval": 3000
+              "batchInterval": 20000
             }
           },
           "response": {
@@ -153,12 +134,39 @@
       "typeVersion": 4.2,
       "position": [
         880,
-        -20
+        -100
       ],
       "onError": "continueRegularOutput",
       "notesInFlow": true,
-      "notes": "um por vez, 3 s entre eles; texto como veio",
+      "notes": "um por vez, 20 s entre eles; texto como veio",
       "id": "a7150b0b-0000-4a00-9000-000000000006"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Um resultado por aviso: o envio do alerta da equipe pode juntar vários.\nconst envios = $('Um por envio').all();\nconst saida = [];\n$input.all().forEach((item, i) => {\n  const r = item.json || {};\n  const e = (envios[i] || {}).json || {};\n  const ok = Number(r.statusCode) >= 200 && Number(r.statusCode) < 300 && !r.error;\n  let erro = null;\n  if (!ok) {\n    const m = (r.error && (r.error.message || r.error)) || (r.body && r.body.response && r.body.response.message) || (r.body && r.body.message);\n    erro = String(typeof m === 'string' ? m : JSON.stringify(m || '') || ('HTTP ' + r.statusCode)).slice(0, 300) || ('HTTP ' + r.statusCode);\n  }\n  for (const id of e.ids || []) saida.push({ json: { id, ok, erro } });\n});\nreturn saida;\n"
+      },
+      "name": "Resultado por aviso",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -100
+      ],
+      "id": "a7150b0b-0000-4a00-9000-000000000007"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "descartar",
+        "options": {}
+      },
+      "name": "Um por descarte",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        880,
+        120
+      ],
+      "id": "a7150b0b-0000-4a00-9000-000000000009"
     },
     {
       "parameters": {
@@ -175,7 +183,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify((Number($json.statusCode) >= 200 && Number($json.statusCode) < 300 && !$json.error) ? { rota: 'aviso_resultado', id: $('Um item por aviso').all()[$itemIndex].json.id, ok: true } : { rota: 'aviso_resultado', id: $('Um item por aviso').all()[$itemIndex].json.id, ok: false, erro: (() => { const b = $json.body || {}; const m = $json.error?.message || $json.error || b.response?.message || b.message || b.error; const a = $('Um item por aviso').all()[$itemIndex].json; if (!String(a.telefone || '').replace(/\\D/g, '')) return 'aviso sem telefone'; if (!String(a.mensagem || '').trim()) return 'aviso sem mensagem'; return String(typeof m === 'string' ? m : JSON.stringify(m || '') || ('HTTP ' + $json.statusCode)).slice(0, 300); })() }) }}",
+        "jsonBody": "={{ JSON.stringify($json.ok === true ? { rota: 'aviso_resultado', id: $json.id, ok: true } : { rota: 'aviso_resultado', id: $json.id, ok: false, erro: String($json.erro || 'não enviado') }) }}",
         "options": {
           "timeout": 10000,
           "response": {
@@ -189,12 +197,12 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1100,
-        -20
+        1320,
+        0
       ],
       "onError": "continueRegularOutput",
       "notesInFlow": true,
-      "notes": "aviso_resultado (enviado ou o erro)",
+      "notes": "aviso_resultado (enviado, ou o motivo de não ter saído)",
       "id": "a7150b0b-0000-4a00-9000-000000000008"
     }
   ],
@@ -214,26 +222,30 @@
       "main": [
         [
           {
-            "node": "Tem aviso?",
+            "node": "Fila com proteção",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Tem aviso?": {
+    "Fila com proteção": {
       "main": [
         [
           {
-            "node": "Um item por aviso",
+            "node": "Um por envio",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Um por descarte",
             "type": "main",
             "index": 0
           }
-        ],
-        []
+        ]
       ]
     },
-    "Um item por aviso": {
+    "Um por envio": {
       "main": [
         [
           {
@@ -245,6 +257,28 @@
       ]
     },
     "Manda no WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Resultado por aviso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resultado por aviso": {
+      "main": [
+        [
+          {
+            "node": "Robô: confirma",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Um por descarte": {
       "main": [
         [
           {
