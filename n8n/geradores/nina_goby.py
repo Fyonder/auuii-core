@@ -193,7 +193,22 @@ if (id.primeiroContato !== false) {{
     : '';
   // Só cumprimentou ("oi", "bom dia", "preciso de ajuda"): a resposta é FIXA, sem IA.
   if (soCumprimento && !blocoPendentes && id.aguardandoHumano !== true) {{
-    if (id.perfil === 'motoboy') saudacaoPronta = oi + ' O que você precisa?' + (lista ? '\\nCom você agora: ' + lista + '.' : '');
+    // Motoboy (dono, 08/10/2026: "no primeiro contato dá pra já identificar quem é e como ele
+    // está no momento"): abre pela situação dele — as corridas em aberto COM a etapa — e pergunta
+    // se é sobre uma delas, pra ele não ter que explicar de novo quem é nem qual pedido.
+    if (id.perfil === 'motoboy') {{
+      const cs = Array.isArray(id.corridas) ? id.corridas : null;
+      if (cs === null) saudacaoPronta = oi + ' O que você precisa?';
+      else if (!cs.length) saudacaoPronta = oi + ' Você não está com nenhuma corrida aberta agora. O que você precisa?';
+      else if (cs.length === 1) {{
+        const c = cs[0];
+        saudacaoPronta = oi + ' Vi que você está com a #' + c.codigo + (c.loja ? ' da ' + limpa(c.loja) : '') + (c.etapa ? ' — ' + c.etapa : '') + '. É sobre ela ou outra coisa?';
+      }} else {{
+        saudacaoPronta = oi + ' Você está com ' + cs.length + ' corridas agora:\\n'
+          + cs.slice(0, 5).map((c) => '#' + c.codigo + (c.loja ? ' ' + limpa(c.loja) : '') + (c.etapa ? ' — ' + c.etapa : '')).join('\\n')
+          + '\\nÉ sobre alguma delas? Me diz qual.';
+      }}
+    }}
     else if (id.perfil === 'restaurante') saudacaoPronta = oi + ' O que vocês precisam?' + (lista ? '\\nEm andamento agora: ' + lista + '.' : '');
     else if (id.perfil === 'equipe') saudacaoPronta = oi + ' O que você precisa?';
     else if (id.perfil === 'suporte') saudacaoPronta = 'Oi! Aqui é a Nina, modo suporte. Me manda o nome de quem você quer ver (entregador ou loja), o código do entregador ou o número de um pedido.';
@@ -351,7 +366,7 @@ ENTREGADOR = f"""=Você é a {PERSONA}, assistente virtual da GOBY, falando com 
 {{{{ {CTX}.blocoInicio }}}}
 
 COMEÇO DA CONVERSA: DESCUBRA O QUE ELE PRECISA
-- Cumprimento ou pedido vago ("preciso de ajuda", "tô com problema"): pergunte o que ele precisa e, se tiver, diga os pedidos em aberto com ele (#número e loja).
+- Cumprimento ou pedido vago ("preciso de ajuda", "tô com problema"): já abra pela situação dele — os pedidos em aberto com ele, um por linha (#número, loja e a etapa) — e pergunte se é sobre um deles ou outra coisa. Nenhum pedido em aberto: diga que ele não está com corrida agora e pergunte o que precisa.
 - Ele já disse o problema? Vá direto a ele: use o pedido certo da lista (ou "Buscar corrida" pelo número) e responda. Não pergunte de novo o que ele já disse.
 - Há mensagens pendentes acima? Responda cada uma em uma frase e depois a atual, numa resposta só.
 
@@ -395,7 +410,7 @@ PRIMEIRO: DESCUBRA QUEM É (pule se o bloco QUEM É acima disser que é da equip
 
 ENTREGADOR OU MOTOBOY DA GOBY
 - Peça nome e sobrenome e chame "Me identificar" com o que ela escreveu (nunca com o nome do WhatsApp, nunca sem ela ter escrito o nome).
-- vinculado true: cumprimente pelo primeiro nome e diga os pedidos em aberto que vieram (#número e loja); se ele já contou o problema, responda sobre o pedido certo; senão, pergunte o que aconteceu e com qual pedido.
+- vinculado true: cumprimente pelo primeiro nome e já diga como ele está agora — os pedidos em aberto que vieram, um por linha (#número, loja e etapa); se ele já contou o problema, responda sobre o pedido certo; senão, pergunte se é sobre um deles.
 - nome_incompleto ou ambiguo: peça o nome completo de novo (nome e sobrenome). Não cite nomes.
 - nao_encontrado: diga que não achou cadastro com esse nome e pergunte se quer falar com um atendente.
 - bloqueado, ja_identificado, ou a segunda falha seguida: diga que um atendente vai confirmar o cadastro por aqui e termine com [SUPORTE].
