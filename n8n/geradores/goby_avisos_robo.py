@@ -22,7 +22,8 @@ Agora nada sai direto: tudo entra numa fila (dados estáticos do fluxo) e a cada
   - RITMO: no máximo AVISOS_POR_MINUTO (2) por rodada, 15 s entre eles, e AVISOS_POR_HORA (30).
     Cada rodada cabe em 46 s no pior caso (tempos limite curtos): rodadas não se sobrepõem.
   - ORDEM: código, reserva, os outros, e por último os alertas da equipe.
-  - EQUIPE: os alertas na fila pro mesmo número da equipe saem numa mensagem só.
+  - EQUIPE: cada número da equipe recebe no máximo 1 mensagem a cada AVISOS_EQUIPE_JANELA_MIN (15):
+    o 1º alerta sai na hora, os seguintes viram um "📋 Resumo pra equipe (N avisos)".
   - Tudo que não sai (vencido, repetido, sem telefone) volta pro robô como
     aviso_resultado ok:false com o motivo; o que sai, ok:true.
 Os limites podem ser mudados no .env do Kali (repassado pelo compose) sem mexer no fluxo.
@@ -64,10 +65,14 @@ const num = (k, d) => { const v = Number($env[k]); return Number.isFinite(v) && 
 const POR_RODADA = Math.min(num('AVISOS_POR_MINUTO', 2), 2);
 const POR_HORA = num('AVISOS_POR_HORA', 30);
 const JANELA_CODIGO_MS = num('AVISOS_JANELA_CODIGO_MIN', 5) * 60000;
-const VIDA_MS = { codigo: 10 * 60000, reserva: 25 * 60000, equipe: 30 * 60000 };
+const VIDA_MS = { codigo: 10 * 60000, reserva: 25 * 60000, equipe: 45 * 60000 };
 const VIDA_PADRAO = 60 * 60000;
 const prioridade = (t) => (t === 'codigo' ? 0 : t === 'reserva' ? 1 : t === 'equipe' ? 3 : 2);
 const MAX_TEXTO = 3500;
+// Equipe (dono, 08/10/2026: "tá enviando muitas mensagens pros números de suporte"): cada
+// número da equipe recebe no máximo UMA mensagem a cada AVISOS_EQUIPE_JANELA_MIN (15), com
+// tudo o que juntou. O 1º alerta sai na hora; os seguintes esperam o resumo.
+const EQUIPE_JANELA_MS = num('AVISOS_EQUIPE_JANELA_MIN', 15) * 60000;
 
 const agora = Date.now();
 const st = $getWorkflowStaticData('global');
@@ -118,14 +123,17 @@ for (const f of [...fila]) {
   if (!fila.includes(f)) continue;
   let envio;
   if (f.tipo === 'equipe') {
-    let texto = '';
+    const ultimo = Math.max(0, ...enviados.filter((e) => e.tipo === 'equipe' && e.telefone === f.telefone).map((e) => e.em));
+    if (agora - ultimo < EQUIPE_JANELA_MS) continue; // espera o resumo; fica na fila
     const ids = [];
+    let corpo = '';
     for (const g of fila.filter((x) => x.tipo === 'equipe' && x.telefone === f.telefone)) {
-      const mais = (texto ? '\n\n' : '') + g.mensagem;
-      if (texto && (texto + mais).length > MAX_TEXTO) break;
-      texto += mais;
+      const mais = (corpo ? '\n' : '') + g.mensagem.trim();
+      if (corpo && (corpo + mais).length > MAX_TEXTO - 60) break;
+      corpo += mais;
       ids.push(g.id);
     }
+    const texto = ids.length > 1 ? '📋 Resumo pra equipe (' + ids.length + ' avisos):\n' + corpo : corpo;
     envio = { ids, telefone: f.telefone, mensagem: texto, tipo: 'equipe' };
   } else {
     envio = { ids: [f.id], telefone: f.telefone, mensagem: f.mensagem, tipo: f.tipo };
