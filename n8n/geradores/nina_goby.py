@@ -1470,12 +1470,18 @@ nodes["Agente Nina (entregador)"]["parameters"]["options"]["systemMessage"] = _s
 # http://ponte:3100) em vez da Evolution. Sem a variável, volta pra Evolution.
 # O aviso interno pro suporte NÃO vai pela Meta: fora da janela de 24 h do número do suporte
 # ela só aceita template. Sai pelo número da Auuii na Evolution (NINA_AVISO_INSTANCIA).
-BASE_ENVIO = "={{ $env.NINA_WHATSAPP_URL || $env.EVOLUTION_API_URL }}"
-for _n in ("Enviar resposta", "Marcar como lida", "Mostrar digitando", "Responde pelo robô"):
+# Mesmo dia, mais tarde (dono): a Duda foi desligada e o número da Auuii (instância `auuii` da
+# Evolution) passou pra Nina também. A Nina responde pelo número por onde a mensagem chegou:
+# instância da Meta (META_INSTANCIA, `goby`) → ponte; qualquer outra → Evolution.
+_BASES_ANTIGAS = ("={{ $env.EVOLUTION_API_URL }}", "={{ $env.NINA_WHATSAPP_URL || $env.EVOLUTION_API_URL }}")
+for _n, _de in (("Enviar resposta", "Canal e WhatsApp?"), ("Marcar como lida", "Normaliza"),
+                ("Mostrar digitando", "Normaliza"), ("Responde pelo robô", "Normaliza")):
     _p = nodes[_n]["parameters"]
-    if not _p["url"].startswith(BASE_ENVIO):
-        assert _p["url"].startswith("={{ $env.EVOLUTION_API_URL }}"), (_n, _p["url"])
-        _p["url"] = BASE_ENVIO + _p["url"][len("={{ $env.EVOLUTION_API_URL }}"):]
+    _base = ("={{ ($('" + _de + "').first().json.instancia || 'goby') === ($env.META_INSTANCIA || 'goby')"
+             " && $env.NINA_WHATSAPP_URL ? $env.NINA_WHATSAPP_URL : $env.EVOLUTION_API_URL }}")
+    if not _p["url"].startswith(_base):
+        _velha = next(b for b in _BASES_ANTIGAS if _p["url"].startswith(b))
+        _p["url"] = _base + _p["url"][len(_velha):]
 nodes["Avisar suporte"]["parameters"]["url"] = (
     "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.NINA_AVISO_INSTANCIA || 'auuii' }}"
 )

@@ -77,6 +77,8 @@ services:
       AVISOS_POR_HORA: ${AVISOS_POR_HORA:-30}
       AVISOS_JANELA_CODIGO_MIN: ${AVISOS_JANELA_CODIGO_MIN:-5}
       AVISOS_EQUIPE_JANELA_MIN: ${AVISOS_EQUIPE_JANELA_MIN:-15}
+      # Por qual instancia da Evolution os avisos saem (08/10: o numero da Auuii, agora da Nina)
+      AVISOS_INSTANCIA: ${AVISOS_INSTANCIA:-auuii}
       # instancia do WhatsApp e numero do suporte humano (handoff)
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-auuii}
       SUPORTE_WHATSAPP: ${SUPORTE_WHATSAPP:-}
@@ -186,6 +188,9 @@ services:
       SUPORTE_WHATSAPP: ${SUPORTE_WHATSAPP:-}
       # Numero da API oficial (Meta) = o da Goby. Vazios = parte da Meta desligada.
       META_INSTANCIA: ${META_INSTANCIA:-goby}
+      # Instancia da Evolution que tambem e da Nina (08/10: Duda desligada, numero da Auuii
+      # passou pra Nina). No painel vira a mesma conversa do numero da Meta. Vazio = nenhuma.
+      EVOLUTION_DA_META: ${EVOLUTION_DA_META-auuii}
       META_WHATSAPP_TOKEN: ${META_WHATSAPP_TOKEN:-}
       META_PHONE_NUMBER_ID: ${META_PHONE_NUMBER_ID:-}
       TZ: ${TZ:-America/Sao_Paulo}

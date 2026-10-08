@@ -118,6 +118,24 @@ Ligar (precisa da ponte já ligada):
 4. **Painel da Meta → Webhooks:** URL `https://ifood.onrender.com/webhook/whatsapp-meta`,
    o mesmo `META_VERIFY_TOKEN`, "Verificar e salvar", e assinar o campo `messages`.
 
+### Depois (08/10, à tarde): Duda desligada, os dois números são da Nina
+
+Decisão do dono: a **Duda foi desligada** e o número da Auuii (instância `auuii` da Evolution)
+passou pra Nina. Ficam os dois rodando:
+
+| Número | Caminho | Pra quê |
+|---|---|---|
+| Oficial da Goby (Meta) | Meta → backend → ponte → n8n `/webhook/goby` | Nina |
+| Da Auuii (Evolution `auuii`) | webhook da instância → n8n `/webhook/goby` | Nina + **todos os avisos do robô** (código incluso, `AVISOS_INSTANCIA`) |
+
+- A Nina responde pelo número por onde a mensagem chegou (instância `goby` → ponte; `auuii` → Evolution).
+- No painel, as duas viram **a mesma conversa da Goby** por pessoa (`EVOLUTION_DA_META=auuii` na ponte).
+  O envio pelo painel sai pelo número por onde a pessoa escreveu por último; sem saber, pela Evolution.
+- O webhook da instância `auuii` na Evolution aponta pra `http://n8n:5678/webhook/goby`.
+- A resposta SIM/NÃO aos avisos chega no número da Auuii e a Nina trata (rota=resposta).
+- Risco: o número da Auuii agora manda os avisos em volume; a fila com proteção (2/min, 30/h,
+  1 código por número a cada 5 min) é o que segura o ban que derrubou o da Goby em 08/10.
+
 ### O que a Nina consulta (só leitura, só do entregador que está falando)
 
 | Ferramenta no n8n | Rota | Parâmetro |

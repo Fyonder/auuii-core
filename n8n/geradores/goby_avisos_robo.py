@@ -40,6 +40,11 @@ As rodadas são guardadas (saveDataSuccessExecution "all"): com "none" o n8n 2.3
 marcada "em andamento" pra sempre (07/10). O nó de código voltou (a fila precisa de memória);
 a causa do "em andamento" era o "none", não o código.
 
+ONDE SAEM (dono, 08/10/2026 à tarde): o número da Goby foi pra API oficial da Meta e saiu da
+Evolution; a Duda foi desligada e o número da Auuii (instância `auuii`) virou da Nina. TODOS os
+avisos (código incluso) saem por ele: AVISOS_INSTANCIA (padrão `auuii`). A resposta ao aviso
+chega nesse mesmo número, que agora é atendido pela Nina (etapa 14: rota=resposta).
+
 Uso: python n8n/geradores/goby_avisos_robo.py   (idempotente; mantém o id)
 """
 import json
@@ -208,7 +213,7 @@ def montar():
         {
             "parameters": {
                 "method": "POST",
-                "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/goby",
+                "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.AVISOS_INSTANCIA || 'auuii' }}",
                 "sendHeaders": True,
                 "headerParameters": {"parameters": [
                     {"name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}"},
@@ -290,6 +295,7 @@ if __name__ == '__main__':
     texto = json.dumps(f, ensure_ascii=False)
     assert ".item.json" not in texto
     assert "x-api-key" in texto and "aviso_resultado" in texto
+    assert "sendText/goby" not in texto, "o número da Goby está na Meta: avisos saem por AVISOS_INSTANCIA"
     # Proteção do WhatsApp (08/10): nada sai sem passar pela fila, e nunca mais 3 s entre envios.
     assert f["connections"]["Robô: avisos"]["main"][0][0]["node"] == "Fila com proteção"
     _manda = next(n for n in f["nodes"] if n["name"] == "Manda no WhatsApp")

@@ -22,7 +22,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { io } = require('socket.io-client');
-const { Classificador } = require('./normalizar');
+const { Classificador, chaveCanonica } = require('./normalizar');
 const { metaParaEvolution, eventoDeEnvio, GraphMeta } = require('./meta');
 const { version: VERSAO } = require('../package.json');
 
@@ -42,6 +42,9 @@ const cfg = {
     // O número da Goby (Nina) foi pra API oficial em 08/10/2026: a instância `goby` sai pela Meta.
     metaInstancia: process.env.META_INSTANCIA || 'goby',
     metaVersao: process.env.META_GRAPH_VERSAO || 'v23.0',
+    // Instância da Evolution que também é da empresa do número da Meta (08/10/2026: o número da
+    // Auuii, `auuii`, passou pra Nina). No painel vira a mesma conversa da Meta.
+    evolutionDaMeta: process.env.EVOLUTION_DA_META || '',
     n8nWebhook: process.env.N8N_WEBHOOK_META || `http://n8n:5678/webhook/${process.env.META_INSTANCIA || 'goby'}`,
 };
 
@@ -242,7 +245,13 @@ async function atenderEnvio(pedido) {
     // ANTES do sendText: o SEND_MESSAGE da Evolution chega enquanto a chamada ainda
     // não voltou, e é por este pendente que ele é reconhecido como do operador.
     classificador.registrarPendente({ reqId, conversaId, numero, texto, instancia });
-    if (instancia === cfg.metaInstancia) {
+    // Conversa da Meta com um número da Evolution junto (EVOLUTION_DA_META): responde pelo
+    // número por onde a pessoa escreveu por último; sem saber, pela Evolution (sem janela de 24 h).
+    let instanciaEvolution = instancia;
+    if (instancia === cfg.metaInstancia && cfg.evolutionDaMeta) {
+        if (ultimoCanal.get(chaveCanonica(numero)) !== 'meta') instanciaEvolution = cfg.evolutionDaMeta;
+    }
+    if (instancia === cfg.metaInstancia && instanciaEvolution === instancia) {
         try {
             const id = await enviarPelaMeta(numero, texto);
             enfileirar('enviado', { reqId, conversaId, id, jid: `${String(numero).replace(/\D/g, '')}@s.whatsapp.net` });
@@ -255,7 +264,7 @@ async function atenderEnvio(pedido) {
         return;
     }
     try {
-        const resp = await fetch(`${cfg.evolutionUrl}/message/sendText/${encodeURIComponent(instancia)}`, {
+        const resp = await fetch(`${cfg.evolutionUrl}/message/sendText/${encodeURIComponent(instanciaEvolution)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', apikey: cfg.evolutionKey },
             body: JSON.stringify({ number: String(numero).split('@')[0].replace(/\D/g, ''), text: texto }),
@@ -280,6 +289,17 @@ async function atenderEnvio(pedido) {
 // pelo socket (quem recebe da Meta é o backend), sai daqui pro n8n no formato da
 // Evolution, e o n8n responde chamando /message/sendText/goby AQUI, não na Evolution.
 
+// Por qual número cada pessoa escreveu por último ('meta' ou 'evolution'), pro envio do painel.
+// Só em memória: depois de reiniciar, o padrão é a Evolution, que não tem janela de 24 h.
+const ultimoCanal = new Map();
+function lembrarCanal(telefone, canal) {
+    const k = chaveCanonica(telefone);
+    if (!k) return;
+    ultimoCanal.delete(k);
+    ultimoCanal.set(k, canal);
+    if (ultimoCanal.size > 5000) ultimoCanal.delete(ultimoCanal.keys().next().value);
+}
+
 // A Meta reenvia o lote inteiro quando o backend responde 503. O que já foi entregue ao
 // n8n não pode ir de novo: a IA responderia duas vezes.
 const entreguesAoN8n = new Map();
@@ -296,7 +316,7 @@ async function receberDaMeta(corpo) {
         const id = ev.data.key.id;
         // Painel: o backend descarta id repetido, então reenvio da Meta não duplica lá.
         const doPainel = classificador.classificar(ev);
-        if (doPainel) { ultimaMensagemEm = Date.now(); enfileirar('evento', doPainel); }
+        if (doPainel) { ultimaMensagemEm = Date.now(); enfileirar('evento', doPainel); lembrarCanal(doPainel.telefone || doPainel.jid, 'meta'); }
         if (jaEntregue(id)) continue;
         try {
             const resp = await fetch(cfg.n8nWebhook, {
@@ -412,10 +432,14 @@ const servidor = http.createServer(async (req, res) => {
 
     let body;
     try { body = JSON.parse(bruto); } catch (_) { return; }
-    const eventos = Array.isArray(body?.data) ? body.data.map((data) => ({ ...body, data })) : [body];
+    // A instância da Evolution que é da mesma empresa do número da Meta (EVOLUTION_DA_META) entra
+    // no painel com o nome da Meta: uma conversa por pessoa, não uma por número.
+    const instancia = body?.instance && body.instance === cfg.evolutionDaMeta ? cfg.metaInstancia : body?.instance;
+    const eventos = Array.isArray(body?.data) ? body.data.map((data) => ({ ...body, instance: instancia, data })) : [{ ...body, instance: instancia }];
     for (const e of eventos) {
         const ev = classificador.classificar(e);
         if (!ev) continue;
+        if (ev.autor === 'contato' && body.instance === cfg.evolutionDaMeta) lembrarCanal(ev.telefone || ev.jid, 'evolution');
         ultimaMensagemEm = Date.now();
         enfileirar('evento', ev);
     }
