@@ -471,7 +471,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.NINA_WHATSAPP_URL || $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Canal e WhatsApp?').first().json.instancia }}",
+        "url": "={{ ($('Canal e WhatsApp?').first().json.instancia || 'goby') === ($env.META_INSTANCIA || 'goby') && $env.NINA_WHATSAPP_URL ? $env.NINA_WHATSAPP_URL : $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Canal e WhatsApp?').first().json.instancia }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -724,7 +724,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.NINA_WHATSAPP_URL || $env.EVOLUTION_API_URL }}/chat/markMessageAsRead/{{ $('Normaliza').first().json.instancia }}",
+        "url": "={{ ($('Normaliza').first().json.instancia || 'goby') === ($env.META_INSTANCIA || 'goby') && $env.NINA_WHATSAPP_URL ? $env.NINA_WHATSAPP_URL : $env.EVOLUTION_API_URL }}/chat/markMessageAsRead/{{ $('Normaliza').first().json.instancia }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -758,7 +758,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.NINA_WHATSAPP_URL || $env.EVOLUTION_API_URL }}/chat/sendPresence/{{ $('Normaliza').first().json.instancia }}",
+        "url": "={{ ($('Normaliza').first().json.instancia || 'goby') === ($env.META_INSTANCIA || 'goby') && $env.NINA_WHATSAPP_URL ? $env.NINA_WHATSAPP_URL : $env.EVOLUTION_API_URL }}/chat/sendPresence/{{ $('Normaliza').first().json.instancia }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -2537,7 +2537,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.NINA_WHATSAPP_URL || $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Normaliza').first().json.instancia || 'goby' }}",
+        "url": "={{ ($('Normaliza').first().json.instancia || 'goby') === ($env.META_INSTANCIA || 'goby') && $env.NINA_WHATSAPP_URL ? $env.NINA_WHATSAPP_URL : $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Normaliza').first().json.instancia || 'goby' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

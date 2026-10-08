@@ -96,7 +96,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/goby",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.AVISOS_INSTANCIA || 'auuii' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
