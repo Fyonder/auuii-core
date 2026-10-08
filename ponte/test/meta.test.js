@@ -14,10 +14,10 @@ function webhook(mensagens, contatos = [{ wa_id: TEL, profile: { name: 'Fulano T
 }
 
 test('texto vira messages.upsert da Evolution que o fluxo da Duda já lê', () => {
-    const [ev] = metaParaEvolution(webhook([{ id: 'wamid.A', from: TEL, timestamp: '1760000000', type: 'text', text: { body: 'oi' } }]), 'meta');
+    const [ev] = metaParaEvolution(webhook([{ id: 'wamid.A', from: TEL, timestamp: '1760000000', type: 'text', text: { body: 'oi' } }]), 'goby');
     assert.deepStrictEqual(ev, {
         event: 'messages.upsert',
-        instance: 'meta',
+        instance: 'goby',
         data: {
             key: { remoteJid: `${TEL}@s.whatsapp.net`, fromMe: false, id: 'wamid.A' },
             pushName: 'Fulano Teste',
@@ -32,7 +32,7 @@ test('mídia vira a chave da Evolution (a Duda pede pra escrever), legenda vai j
         { id: 'a', from: TEL, type: 'audio', audio: { id: 'm1' } },
         { id: 'b', from: TEL, type: 'image', image: { id: 'm2', caption: 'comprovante' } },
         { id: 'c', from: TEL, type: 'sticker', sticker: { id: 'm3' } },
-    ]), 'meta');
+    ]), 'goby');
     assert.deepStrictEqual(evs.map((e) => e.data.message), [
         { audioMessage: {} },
         { imageMessage: { caption: 'comprovante' } },
@@ -44,7 +44,7 @@ test('botão e resposta de lista viram texto', () => {
     const evs = metaParaEvolution(webhook([
         { id: 'a', from: TEL, type: 'button', button: { text: 'Sim' } },
         { id: 'b', from: TEL, type: 'interactive', interactive: { type: 'list_reply', list_reply: { id: 'x', title: 'Meu pedido' } } },
-    ]), 'meta');
+    ]), 'goby');
     assert.deepStrictEqual(evs.map((e) => e.data.message.conversation), ['Sim', 'Meu pedido']);
 });
 
@@ -52,21 +52,21 @@ test('status, reação e outros campos ficam de fora', () => {
     const corpo = webhook([{ id: 'r', from: TEL, type: 'reaction', reaction: { emoji: '👍' } }]);
     corpo.entry[0].changes.push({ field: 'messages', value: { statuses: [{ id: 'wamid.A', status: 'read' }] } });
     corpo.entry[0].changes.push({ field: 'account_update', value: {} });
-    assert.deepStrictEqual(metaParaEvolution(corpo, 'meta'), []);
-    assert.deepStrictEqual(metaParaEvolution({}, 'meta'), []);
+    assert.deepStrictEqual(metaParaEvolution(corpo, 'goby'), []);
+    assert.deepStrictEqual(metaParaEvolution({}, 'goby'), []);
 });
 
 test('o classificador do painel entende o que a ponte gera: contato, IA e operador', () => {
     const c = new Classificador({});
-    const [entrada] = metaParaEvolution(webhook([{ id: 'in1', from: TEL, type: 'text', text: { body: 'oi' } }]), 'meta');
+    const [entrada] = metaParaEvolution(webhook([{ id: 'in1', from: TEL, type: 'text', text: { body: 'oi' } }]), 'goby');
     assert.strictEqual(c.classificar(entrada).autor, 'contato');
-    assert.strictEqual(c.classificar(entrada).instancia, 'meta');
+    assert.strictEqual(c.classificar(entrada).instancia, 'goby');
 
-    const ia = c.classificar(eventoDeEnvio({ instancia: 'meta', id: 'out1', numero: TEL, texto: 'Olá! Sou a Duda.' }));
+    const ia = c.classificar(eventoDeEnvio({ instancia: 'goby', id: 'out1', numero: TEL, texto: 'Olá! Sou a Duda.' }));
     assert.strictEqual(ia.autor, 'ia');
 
-    c.registrarPendente({ reqId: 'r1', conversaId: 'c1', numero: TEL, texto: 'Já resolvo', instancia: 'meta' });
-    const op = c.classificar(eventoDeEnvio({ instancia: 'meta', id: 'out2', numero: TEL, texto: 'Já resolvo' }));
+    c.registrarPendente({ reqId: 'r1', conversaId: 'c1', numero: TEL, texto: 'Já resolvo', instancia: 'goby' });
+    const op = c.classificar(eventoDeEnvio({ instancia: 'goby', id: 'out2', numero: TEL, texto: 'Já resolvo' }));
     assert.strictEqual(op.autor, 'operador');
     assert.strictEqual(op.reqId, 'r1');
 });

@@ -1,12 +1,13 @@
 /**
- * Número da API oficial do WhatsApp (Meta Cloud API) atendido pela Duda.
+ * Número da API oficial do WhatsApp (Meta Cloud API). Desde 08/10/2026 é o da Goby (Nina):
+ * o 44 9164-9192 saiu da Evolution quando foi registrado na Meta.
  *
- * A Duda (n8n) só conhece a Evolution: lê o webhook `messages.upsert` e responde por
+ * O fluxo da Nina (n8n) só conhece a Evolution: lê o webhook `messages.upsert` e responde por
  * `/message/sendText/<instancia>`. Em vez de ensinar a Meta pra cada nó do fluxo, a ponte
- * se faz de Evolution pra instância `meta`:
+ * se faz de Evolution pra instância `goby` (META_INSTANCIA):
  *
  *   Meta ─▶ backend (Render) ─socket 'meta'─▶ ponte ─▶ n8n   (traduzido pra Evolution)
- *   n8n ─/message/sendText/meta─▶ ponte ─▶ graph.facebook.com
+ *   n8n ─/message/sendText/goby─▶ ponte ─▶ graph.facebook.com
  *
  * Aqui ficam as funções puras (tradução) e o cliente da Graph API; quem liga isso no
  * servidor e no socket é o index.js.
@@ -50,7 +51,7 @@ function mensagemEvolution(msg) {
 /**
  * Webhook da Meta → lista de corpos no formato do webhook da Evolution (`messages.upsert`),
  * um por mensagem recebida. Status (enviada/entregue/lida) e o que não é mensagem ficam
- * de fora: a Duda não faz nada com eles.
+ * de fora: a IA não faz nada com eles.
  */
 function metaParaEvolution(corpo, instancia) {
     const saida = [];

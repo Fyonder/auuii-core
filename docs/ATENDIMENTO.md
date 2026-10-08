@@ -79,32 +79,34 @@ painel: filtro **Todas / Auuii / Goby** e "O que a IA sabe" com uma aba por empr
 
 A cota da Groq (8 mil tokens/min por modelo) é a MESMA para as duas IAs.
 
-## Número da API oficial (Meta) — Duda
+## O número da Goby está na API oficial (Meta) — Nina
 
-Um terceiro número, só na API oficial do WhatsApp (Meta Cloud API), atendido pela mesma
-Duda, com o mesmo conhecimento (`settings/whatsappIA`). Instância **`meta`**: conversas
-próprias no painel (a mesma pessoa no número da Evolution e no da Meta são duas conversas).
+Em 08/10/2026 o número da Goby (44 9164-9192) foi registrado na API oficial do WhatsApp
+(Meta Cloud API). Número registrado na Meta sai do WhatsApp comum, então a instância `goby`
+da Evolution ficou em "connecting" pra sempre. A Nina continua a mesma; só muda o caminho:
 
 ```
 Meta ──HTTPS──▶ backend (Render) /webhook/whatsapp-meta     confere X-Hub-Signature-256
                    └─ socket /ponte 'meta' (com ack) ─▶ ponte (este PC)
-                                                         ├─▶ n8n /webhook/auuii  (traduzido pro formato da Evolution)
-                                                         └─▶ painel (como qualquer mensagem)
-n8n ─/message/sendText/meta─▶ ponte ─▶ graph.facebook.com
+                                                         ├─▶ n8n /webhook/goby  (traduzido pro formato da Evolution)
+                                                         └─▶ painel (instância goby, como antes)
+n8n ─/message/sendText/goby─▶ ponte ─▶ graph.facebook.com
 ```
 
-- **A ponte se faz de Evolution pra instância `meta`.** O fluxo da Duda continua lendo
-  `messages.upsert` e chamando `sendText`; só os nós de envio escolhem a URL: `meta` vai
-  pra `PONTE_URL`, o resto pra Evolution. Marcar como lida já leva o "digitando…".
-- **O backend só responde 200 à Meta depois que a ponte confirma.** Ponte fora = 503, e a
-  Meta reenvia sozinha por dias. A ponte lembra o que já entregou ao n8n por 24 h, então
-  reenvio não faz a Duda responder duas vezes.
-- **O aviso interno pro suporte sai sempre pela Evolution**, mesmo em conversa da Meta:
-  pela Meta, fora da janela de 24 h do suporte, só template.
-- **Limites da Meta:** a Duda e o painel só respondem até 24 h depois da última mensagem do
-  contato (depois disso, só template pago; "puxar conversa" com motoboy pelo número da
-  Meta não funciona). Com o número de teste, só os destinatários cadastrados no painel da
-  Meta recebem (erro 131030); o token temporário vence em ~24 h.
+- **A ponte se faz de Evolution pra instância `goby`** (`META_INSTANCIA`). O fluxo da Nina
+  continua lendo `messages.upsert` e chamando `sendText`; os nós de envio usam
+  `NINA_WHATSAPP_URL` (compose: `http://ponte:3100`) em vez da Evolution. Marcar como lida
+  já leva o "digitando…". Envio pelo painel na conversa da Goby também sai pela Meta.
+- **Ponte fora = Nina muda.** Diferente da Duda, o caminho da IA passa pela ponte. O backend
+  só responde 200 à Meta depois que a ponte confirma; senão 503 e a Meta reenvia sozinha
+  (por dias). A ponte lembra o que já entregou ao n8n por 24 h: reenvio não duplica resposta.
+- **O aviso interno da Nina pro suporte sai pelo número da Auuii** (Evolution,
+  `NINA_AVISO_INSTANCIA`): pela Meta, fora da janela de 24 h do suporte, só template.
+- **Limites da Meta:** a Nina e o painel só respondem até 24 h depois da última mensagem do
+  contato. Mensagem que a Goby inicia — avisos do robô (fila, reservas, código), "puxar
+  conversa" com motoboy — só com **template aprovado**, e isso ainda não existe.
+- O backend também tem a instância `meta` (Duda num número da Meta), criada antes de
+  descobrir que o número era o da Goby. Não está em uso.
 
 Ligar (precisa da ponte já ligada):
 
@@ -112,7 +114,7 @@ Ligar (precisa da ponte já ligada):
    `META_APP_SECRET` (painel da Meta → Configurações do app → Básico → Chave secreta).
 2. **`.env` deste PC:** `META_WHATSAPP_TOKEN` e `META_PHONE_NUMBER_ID`, depois
    `docker compose up -d --build ponte n8n`. O log da ponte diz "número da Meta ligado".
-3. **Fluxo da Duda** atualizado no n8n (reimportar `meu-sulporte-unico.json`).
+3. **Fluxo da Nina** publicado (gerador, etapa 22) — ver "Como mudar e publicar a Nina".
 4. **Painel da Meta → Webhooks:** URL `https://ifood.onrender.com/webhook/whatsapp-meta`,
    o mesmo `META_VERIFY_TOKEN`, "Verificar e salvar", e assinar o campo `messages`.
 

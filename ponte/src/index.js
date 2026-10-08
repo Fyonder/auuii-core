@@ -11,7 +11,9 @@
  *
  * O caminho da IA (Evolution → n8n) não passa por aqui: se a ponte cair, a Duda
  * continua atendendo; só o painel deixa de ver ao vivo — e a fila em disco entrega o
- * atraso quando a ponte volta.
+ * atraso quando a ponte volta. EXCEÇÃO: o número da Goby (Nina) está na API oficial da
+ * Meta desde 08/10/2026 e passa INTEIRO pela ponte (ver meta.js) — ponte fora, Nina muda;
+ * a Meta guarda e reenvia quando ela volta.
  *
  * A ponte só transporta. Quem é quem, o que grava, pausa da IA: tudo no backend.
  */
@@ -37,9 +39,10 @@ const cfg = {
     // Número da API oficial (Meta). Sem token e id do número, a parte da Meta fica desligada.
     metaToken: process.env.META_WHATSAPP_TOKEN || '',
     metaNumeroId: process.env.META_PHONE_NUMBER_ID || '',
-    metaInstancia: process.env.META_INSTANCIA || 'meta',
+    // O número da Goby (Nina) foi pra API oficial em 08/10/2026: a instância `goby` sai pela Meta.
+    metaInstancia: process.env.META_INSTANCIA || 'goby',
     metaVersao: process.env.META_GRAPH_VERSAO || 'v23.0',
-    n8nWebhook: process.env.N8N_WEBHOOK_DUDA || 'http://n8n:5678/webhook/auuii',
+    n8nWebhook: process.env.N8N_WEBHOOK_META || `http://n8n:5678/webhook/${process.env.META_INSTANCIA || 'goby'}`,
 };
 
 function log(...partes) {
@@ -273,12 +276,12 @@ async function atenderEnvio(pedido) {
 
 // ─── Número da API oficial (Meta) ──────────────────────────────────────────────────
 //
-// A ponte se faz de Evolution pra instância `meta` (ver meta.js): o webhook da Meta chega
+// A ponte se faz de Evolution pra instância da Meta (META_INSTANCIA, `goby`) (ver meta.js): o webhook da Meta chega
 // pelo socket (quem recebe da Meta é o backend), sai daqui pro n8n no formato da
-// Evolution, e o n8n responde chamando /message/sendText/meta AQUI, não na Evolution.
+// Evolution, e o n8n responde chamando /message/sendText/goby AQUI, não na Evolution.
 
 // A Meta reenvia o lote inteiro quando o backend responde 503. O que já foi entregue ao
-// n8n não pode ir de novo: a Duda responderia duas vezes.
+// n8n não pode ir de novo: a IA responderia duas vezes.
 const entreguesAoN8n = new Map();
 function jaEntregue(id) {
     const agora = Date.now();
@@ -327,7 +330,7 @@ function responderJson(res, status, corpo) {
 
 const ROTAS_EVOLUTION = new Set(['message/sendText', 'chat/markMessageAsRead', 'chat/sendPresence']);
 
-/** As 3 rotas da Evolution que o fluxo da Duda usa, pra instância `meta`. */
+/** As 3 rotas da Evolution que o fluxo da IA usa, pra instância da Meta. */
 async function atenderComoEvolution(req, res, rota) {
     const chave = req.headers.apikey;
     if (typeof chave !== 'string' || chave !== cfg.evolutionKey) return responderJson(res, 401, { error: 'Unauthorized' });
@@ -379,7 +382,7 @@ const servidor = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ ok: true, versao: VERSAO, conectada: socket.connected, fila: fila.length, desde, ultimaMensagemEm }));
         return;
     }
-    // n8n → /message/sendText/meta etc. (só pela rede do docker: a ponte não publica porta).
+    // n8n → /message/sendText/goby etc. (só pela rede do docker: a ponte não publica porta).
     if (req.method === 'POST') {
         const m = /^\/([a-zA-Z]+\/[a-zA-Z]+)\/([A-Za-z0-9_-]+)$/.exec(req.url.split('?')[0]);
         if (m && ROTAS_EVOLUTION.has(m[1]) && m[2] === cfg.metaInstancia) {

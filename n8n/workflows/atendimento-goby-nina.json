@@ -401,7 +401,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Canal e WhatsApp?').first().json.instancia || 'goby' }}",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.NINA_AVISO_INSTANCIA || 'auuii' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -471,7 +471,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Canal e WhatsApp?').first().json.instancia }}",
+        "url": "={{ $env.NINA_WHATSAPP_URL || $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Canal e WhatsApp?').first().json.instancia }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -724,7 +724,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/chat/markMessageAsRead/{{ $('Normaliza').first().json.instancia }}",
+        "url": "={{ $env.NINA_WHATSAPP_URL || $env.EVOLUTION_API_URL }}/chat/markMessageAsRead/{{ $('Normaliza').first().json.instancia }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -758,7 +758,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/chat/sendPresence/{{ $('Normaliza').first().json.instancia }}",
+        "url": "={{ $env.NINA_WHATSAPP_URL || $env.EVOLUTION_API_URL }}/chat/sendPresence/{{ $('Normaliza').first().json.instancia }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -2537,7 +2537,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Normaliza').first().json.instancia || 'goby' }}",
+        "url": "={{ $env.NINA_WHATSAPP_URL || $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Normaliza').first().json.instancia || 'goby' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
