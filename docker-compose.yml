@@ -58,6 +58,13 @@ services:
       #   {{ $env.AUUII_API_URL }}  e  {{ $env.AUUII_API_TOKEN }}
       AUUII_API_URL: ${AUUII_API_URL:-}
       AUUII_API_TOKEN: ${AUUII_API_TOKEN:-}
+      # Chave fixa da Nina (Goby) — mesmo valor de SUPORTE_API_KEY_GOBY no Render.
+      AUUII_API_TOKEN_GOBY: ${AUUII_API_TOKEN_GOBY:-}
+      # Robo da Goby (sistema do socio): rota quem, perfil, fila, reservas, vagas, desempenho, ranking
+      ROBO_GOBY_URL: ${ROBO_GOBY_URL:-https://emcynyuzuafovconujwo.supabase.co/functions/v1/robo-goby}
+      ROBO_GOBY_KEY: ${ROBO_GOBY_KEY:-}
+      # Nina: segundos que cada mensagem espera pra juntar as seguidas (fluxo: "Espera mais mensagens")
+      NINA_ESPERA_JUNTAR: ${NINA_ESPERA_JUNTAR:-8}
       # instancia do WhatsApp e numero do suporte humano (handoff)
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-auuii}
       SUPORTE_WHATSAPP: ${SUPORTE_WHATSAPP:-}
@@ -100,6 +107,16 @@ services:
       # tem a lista propria (MESSAGES_UPSERT) e nao muda.
       WEBHOOK_EVENTS_MESSAGES_UPSERT: "true"
       WEBHOOK_EVENTS_SEND_MESSAGE: "true"
+      # Reinício do n8n não pode perder mensagem (dono, 07/10/2026: "isso não pode acontecer").
+      # Enquanto o n8n sobe, ele recusa a conexão e depois responde 404 até ativar os
+      # fluxos (~30-60 s); com o padrão, 404 está na lista de "não tenta de novo" e a
+      # Evolution desistia na hora (a pergunta das 16:16:50 se perdeu assim). Agora: 404
+      # tenta de novo, até 12 vezes, de 5 s até 30 s entre elas (~2-3 min no total).
+      WEBHOOK_RETRY_MAX_ATTEMPTS: ${WEBHOOK_RETRY_MAX_ATTEMPTS:-12}
+      WEBHOOK_RETRY_INITIAL_DELAY_SECONDS: ${WEBHOOK_RETRY_INITIAL_DELAY_SECONDS:-5}
+      WEBHOOK_RETRY_MAX_DELAY_SECONDS: ${WEBHOOK_RETRY_MAX_DELAY_SECONDS:-30}
+      WEBHOOK_RETRY_USE_EXPONENTIAL_BACKOFF: "true"
+      WEBHOOK_RETRY_NON_RETRYABLE_STATUS_CODES: ${WEBHOOK_RETRY_NON_RETRYABLE_STATUS_CODES:-400,401,403,422}
     ports:
       - "${BIND_ADDR:-0.0.0.0}:${EVOLUTION_PORT:-8080}:8080"
     volumes:

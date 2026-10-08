@@ -1,0 +1,157 @@
+{
+  "id": "gobyVezNaFila001",
+  "name": "Goby: sua vez na fila (Nina)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "name": "A cada minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "c1a0f5e2-0b1e-4d2a-9f00-000000000001"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.ROBO_GOBY_URL || 'https://emcynyuzuafovconujwo.supabase.co/functions/v1/robo-goby' }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "rota",
+              "value": "vez"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ROBO_GOBY_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Robô: quem está na vez",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "notesInFlow": true,
+      "notes": "rota vez do robô da Goby (precisa existir)",
+      "id": "c1a0f5e2-0b1e-4d2a-9f00-000000000002"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Robô da Goby (rota vez) → quem acabou de entrar na vez de escolher vaga.\nconst r = $input.first().json || {};\nconst st = $getWorkflowStaticData('global');\nconst avisados = st.avisados || (st.avisados = {});\nconst agora = Date.now();\nfor (const [k, em] of Object.entries(avisados)) if (agora - em > 6 * 3600 * 1000) delete avisados[k];\n\nif (r.ok !== true || String(r.estado || '').toLowerCase() !== 'rodando') return [];\nconst lista = Array.isArray(r.naVez) ? r.naVez : (r.naVez ? [r.naVez] : []);\n\nconst titulo = (t) => String(t || '').toLowerCase().replace(/(^|\\s)\\S/g, (c) => c.toUpperCase());\nconst hora = (iso) => {\n  const d = iso ? new Date(iso) : null;\n  return d && !isNaN(d) ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) : null;\n};\n\nconst saida = [];\nfor (const v of lista) {\n  const tel = String(v.telefone || '').replace(/\\D/g, '');\n  if (tel.length < 10) continue;\n  const numero = tel.startsWith('55') ? tel : '55' + tel;\n  const chave = numero + '|' + (v.desde || v.inicio || '');\n  if (avisados[chave]) continue;\n  avisados[chave] = agora;\n  const nome = titulo(String(v.nome || '').split(/\\s+-\\s+|\\s+/)[0]);\n  const ate = hora(v.ate || v.fim);\n  const min = Number(r.tempoMaximoDaVezMin || v.minutos) || null;\n  const prazo = ate ? ` até as ${ate}` : (min ? ` nos próximos ${min} min` : '');\n  saida.push({ json: {\n    number: numero,\n    text: `Oi${nome ? ', ' + nome : ''}! Chegou a sua vez de escolher sua vaga na Go By. Abre o app e reserva${prazo}. 🛵`,\n  } });\n}\nreturn saida;\n"
+      },
+      "name": "Quem avisar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "cada vez é avisada uma vez só",
+      "id": "c1a0f5e2-0b1e-4d2a-9f00-000000000003"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/goby",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $json.number, text: $json.text }) }}",
+        "options": {}
+      },
+      "name": "Avisar no WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "notesInFlow": true,
+      "notes": "número da Goby (instância goby)",
+      "id": "c1a0f5e2-0b1e-4d2a-9f00-000000000004"
+    }
+  ],
+  "connections": {
+    "A cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Robô: quem está na vez",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Robô: quem está na vez": {
+      "main": [
+        [
+          {
+            "node": "Quem avisar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quem avisar": {
+      "main": [
+        [
+          {
+            "node": "Avisar no WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none"
+  },
+  "pinData": {}
+}

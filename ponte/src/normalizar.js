@@ -107,7 +107,9 @@ function emMs(ts) {
 
 class Classificador {
     constructor({ suporteWhatsapp = '', janelaPendenteMs = 60000, janelaIdsMs = 10 * 60000, agora = () => Date.now() } = {}) {
-        this.suporte = chaveCanonica(suporteWhatsapp);
+        // SUPORTE_WHATSAPP pode ter vários números separados por vírgula ou ponto e vírgula
+        // (dono, 05/10/2026). O aviso interno pra qualquer um deles é "sistema".
+        this.suportes = new Set(String(suporteWhatsapp || '').split(/[,;\n]+/).map(chaveCanonica).filter((k) => k.length >= 10));
         this.janelaPendenteMs = janelaPendenteMs;
         this.janelaIdsMs = janelaIdsMs;
         this.agora = agora;
@@ -177,7 +179,7 @@ class Classificador {
                 const [p] = this.pendentes.splice(i, 1);
                 return { ...base, autor: 'operador', reqId: p.reqId, conversaId: p.conversaId };
             }
-            if (this.suporte && chave === this.suporte && /AVISO INTERNO/i.test(texto)) {
+            if (this.suportes.has(chave) && /AVISO INTERNO/i.test(texto)) {
                 return { ...base, autor: 'sistema' };
             }
             return { ...base, autor: 'ia' };
