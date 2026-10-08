@@ -171,7 +171,7 @@
     },
     {
       "parameters": {
-        "url": "={{ $env.AUUII_API_URL }}/api/suporte/identificar?telefone={{ $('Normaliza').first().json.chatId }}",
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/identificar?telefone={{ $('Normaliza').first().json.chatId }}&instancia={{ $('Normaliza').first().json.instancia }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -353,7 +353,7 @@
     {
       "parameters": {
         "method": "PUT",
-        "url": "={{ $env.AUUII_API_URL }}/api/suporte/identificar?telefone={{ $('Normaliza').first().json.chatId }}",
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/identificar?telefone={{ $('Normaliza').first().json.chatId }}&instancia={{ $('Normaliza').first().json.instancia }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -723,7 +723,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Canal e WhatsApp?').first().json.instancia || $env.EVOLUTION_INSTANCE }}",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ ((i) => i && i !== 'meta' ? i : $env.EVOLUTION_INSTANCE)($('Canal e WhatsApp?').first().json.instancia) }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -793,7 +793,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Canal e WhatsApp?').first().json.instancia }}",
+        "url": "={{ $('Canal e WhatsApp?').first().json.instancia === 'meta' ? $env.PONTE_URL : $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Canal e WhatsApp?').first().json.instancia }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -1358,7 +1358,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/chat/markMessageAsRead/{{ $('Normaliza').first().json.instancia }}",
+        "url": "={{ $('Normaliza').first().json.instancia === 'meta' ? $env.PONTE_URL : $env.EVOLUTION_API_URL }}/chat/markMessageAsRead/{{ $('Normaliza').first().json.instancia }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -1392,7 +1392,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/chat/sendPresence/{{ $('Normaliza').first().json.instancia }}",
+        "url": "={{ $('Normaliza').first().json.instancia === 'meta' ? $env.PONTE_URL : $env.EVOLUTION_API_URL }}/chat/sendPresence/{{ $('Normaliza').first().json.instancia }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -1733,7 +1733,7 @@
     },
     {
       "parameters": {
-        "url": "={{ $env.AUUII_API_URL }}/api/suporte/pausa?telefone={{ $('Canal e WhatsApp?').first().json.chatId }}",
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/pausa?telefone={{ $('Canal e WhatsApp?').first().json.chatId }}&instancia={{ $('Canal e WhatsApp?').first().json.instancia }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -1829,7 +1829,7 @@
     },
     {
       "parameters": {
-        "url": "={{ $env.AUUII_API_URL }}/api/suporte/handoff?telefone={{ $('Canal e WhatsApp?').first().json.chatId }}",
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/handoff?telefone={{ $('Canal e WhatsApp?').first().json.chatId }}&instancia={{ $('Canal e WhatsApp?').first().json.instancia }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -2149,7 +2149,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Resposta da decisao').first().json.instancia || $env.EVOLUTION_INSTANCE }}",
+        "url": "={{ $('Resposta da decisao').first().json.instancia === 'meta' ? $env.PONTE_URL : $env.EVOLUTION_API_URL }}/message/sendText/{{ $('Resposta da decisao').first().json.instancia || $env.EVOLUTION_INSTANCE }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

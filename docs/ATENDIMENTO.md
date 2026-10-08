@@ -79,6 +79,43 @@ painel: filtro **Todas / Auuii / Goby** e "O que a IA sabe" com uma aba por empr
 
 A cota da Groq (8 mil tokens/min por modelo) é a MESMA para as duas IAs.
 
+## Número da API oficial (Meta) — Duda
+
+Um terceiro número, só na API oficial do WhatsApp (Meta Cloud API), atendido pela mesma
+Duda, com o mesmo conhecimento (`settings/whatsappIA`). Instância **`meta`**: conversas
+próprias no painel (a mesma pessoa no número da Evolution e no da Meta são duas conversas).
+
+```
+Meta ──HTTPS──▶ backend (Render) /webhook/whatsapp-meta     confere X-Hub-Signature-256
+                   └─ socket /ponte 'meta' (com ack) ─▶ ponte (este PC)
+                                                         ├─▶ n8n /webhook/auuii  (traduzido pro formato da Evolution)
+                                                         └─▶ painel (como qualquer mensagem)
+n8n ─/message/sendText/meta─▶ ponte ─▶ graph.facebook.com
+```
+
+- **A ponte se faz de Evolution pra instância `meta`.** O fluxo da Duda continua lendo
+  `messages.upsert` e chamando `sendText`; só os nós de envio escolhem a URL: `meta` vai
+  pra `PONTE_URL`, o resto pra Evolution. Marcar como lida já leva o "digitando…".
+- **O backend só responde 200 à Meta depois que a ponte confirma.** Ponte fora = 503, e a
+  Meta reenvia sozinha por dias. A ponte lembra o que já entregou ao n8n por 24 h, então
+  reenvio não faz a Duda responder duas vezes.
+- **O aviso interno pro suporte sai sempre pela Evolution**, mesmo em conversa da Meta:
+  pela Meta, fora da janela de 24 h do suporte, só template.
+- **Limites da Meta:** a Duda e o painel só respondem até 24 h depois da última mensagem do
+  contato (depois disso, só template pago; "puxar conversa" com motoboy pelo número da
+  Meta não funciona). Com o número de teste, só os destinatários cadastrados no painel da
+  Meta recebem (erro 131030); o token temporário vence em ~24 h.
+
+Ligar (precisa da ponte já ligada):
+
+1. **Render (backend):** `META_VERIFY_TOKEN` (uma senha que você inventa) e
+   `META_APP_SECRET` (painel da Meta → Configurações do app → Básico → Chave secreta).
+2. **`.env` deste PC:** `META_WHATSAPP_TOKEN` e `META_PHONE_NUMBER_ID`, depois
+   `docker compose up -d --build ponte n8n`. O log da ponte diz "número da Meta ligado".
+3. **Fluxo da Duda** atualizado no n8n (reimportar `meu-sulporte-unico.json`).
+4. **Painel da Meta → Webhooks:** URL `https://ifood.onrender.com/webhook/whatsapp-meta`,
+   o mesmo `META_VERIFY_TOKEN`, "Verificar e salvar", e assinar o campo `messages`.
+
 ### O que a Nina consulta (só leitura, só do entregador que está falando)
 
 | Ferramenta no n8n | Rota | Parâmetro |

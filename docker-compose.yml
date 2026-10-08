@@ -54,6 +54,9 @@ services:
       #   {{ $env.EVOLUTION_API_URL }}  e  {{ $env.EVOLUTION_API_KEY }}
       EVOLUTION_API_URL: http://evolution:8080
       EVOLUTION_API_KEY: ${AUTHENTICATION_API_KEY}
+      # Numero da API oficial (Meta): a Duda responde a instancia "meta" pela ponte,
+      # que fala com a Graph API (docs/ATENDIMENTO.md, "Número da API oficial")
+      PONTE_URL: http://ponte:3100
       # sua API (motoboys, fila, corridas) — usada pelas tools do agente
       #   {{ $env.AUUII_API_URL }}  e  {{ $env.AUUII_API_TOKEN }}
       AUUII_API_URL: ${AUUII_API_URL:-}
@@ -178,6 +181,9 @@ services:
       EVOLUTION_API_KEY: ${AUTHENTICATION_API_KEY}
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-auuii}
       SUPORTE_WHATSAPP: ${SUPORTE_WHATSAPP:-}
+      # Numero da API oficial (Meta). Vazios = parte da Meta desligada.
+      META_WHATSAPP_TOKEN: ${META_WHATSAPP_TOKEN:-}
+      META_PHONE_NUMBER_ID: ${META_PHONE_NUMBER_ID:-}
       TZ: ${TZ:-America/Sao_Paulo}
     volumes:
       - ponte_dados:/data
