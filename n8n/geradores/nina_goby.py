@@ -53,7 +53,7 @@ def add_node(n):
     nodes[n["name"]] = n
 
 PERSONA = "{{ $('Identificar').first().json.persona || 'Nina' }}"
-PRIMEIRO_NOME = "{{ (($('Normaliza').first().json.nome || '').trim().split(/\\s+/)[0]) || 'a pessoa' }}"
+PRIMEIRO_NOME = "{{ (($('Normaliza').first().json.nome || '').trim().split(/\\s+/)[0].toLowerCase().replace(/(^|-)\\S/g, (x) => x.toUpperCase())) || 'a pessoa' }}"
 CTX = "$('Monta contexto').first().json"
 
 # ── 1. Normaliza: msgId ───────────────────────────────────────────────────────────────
@@ -174,7 +174,8 @@ const msg = textos.join('\\n');
 const soMidia = !msg && midias.length > 0;
 const midia = midias.length ? midias[midias.length - 1] : '';
 const mensagem = msg + (msg && midias.length ? '\\n[Também mandou ' + [...new Set(midias)].map((t) => NOMES_MIDIA[t] || NOMES_MIDIA.outro).join(' e ') + ', que você não consegue ver nem ouvir: responda o texto e diga que só entende mensagem escrita, pra ela mandar aquilo de novo por texto.]' : '');
-const primeiro = (n) => (String(n || '').trim().split(/\\s+/)[0] || '');
+// Primeiro nome arrumado: o cadastro da Goby vem em CAIXA ALTA ("Oi, JOAO!" parecia grito).
+const primeiro = (n) => (String(n || '').trim().split(/\\s+/)[0] || '').toLowerCase().replace(/(^|[-'])([a-zà-öø-ÿ])/g, (m, a, b) => a + b.toUpperCase());
 const nomeCadastro = primeiro(id.nome);
 const nomeZap = primeiro($('Normaliza').first().json.nome);
 const SO_CUMPRIMENTO = new Set(['oi','oii','oie','oiee','ola','opa','eai','e','ai','bom','boa','dia','tarde','noite','tudo','bem','td','blz','beleza','salve','alo','hello','nina','moca','amigo','amiga','pessoal','gente','preciso','de','ajuda','uma','me','ajudar','ajudem','pode','podem','alguem','socorro','consegue','por','favor','pf','pfv']);
@@ -185,32 +186,50 @@ let blocoInicio = '';
 let saudacaoPronta = '';
 // Só "oi": a resposta fixa vale a qualquer hora, a não ser que o backend diga que já
 // conversaram hoje. Sem a informação (backend antigo), também cumprimenta pelo nome.
+// Situação do motoboy agora (dono, 08/10/2026: "no primeiro contato dá pra já identificar quem é e
+// como ele está"), pras duas saudações fixas. Tom gentil (dono, 08/10: os motoboys acharam as
+// respostas "ignorantes"): "Vi aqui", "por favor", "Em que posso te ajudar?".
+const situacaoMotoboy = () => {{
+  const cs = Array.isArray(id.corridas) ? id.corridas : null;
+  if (cs === null) return ' Em que posso te ajudar?';
+  if (!cs.length) return ' No momento você não tem nenhuma corrida em aberto. Em que posso te ajudar?';
+  if (cs.length === 1) {{
+    const c = cs[0];
+    return ' Vi aqui que você está com a #' + c.codigo + (c.loja ? ' da ' + limpa(c.loja) : '') + (c.etapa ? ' (' + c.etapa + ')' : '') + '. Precisa de ajuda com ela ou é outra coisa?';
+  }}
+  return ' Vi aqui que você está com ' + cs.length + ' corridas:\\n'
+    + cs.slice(0, 5).map((c) => '#' + c.codigo + (c.loja ? ' ' + limpa(c.loja) : '') + (c.etapa ? ' (' + c.etapa + ')' : '')).join('\\n')
+    + '\\nÉ sobre alguma delas? Me diz qual, por favor.';
+}};
 if (id.primeiroContato !== false) {{
   const quem = (id.perfil === 'motoboy' || id.perfil === 'equipe') ? (nomeCadastro || nomeZap) : (id.perfil === 'restaurante' || id.perfil === 'suporte') ? '' : nomeZap;
-  const oi = 'Oi' + (quem ? ', ' + quem : '') + '! Aqui é a ' + (id.persona || 'Nina') + ', da Goby.';
+  const oi = 'Oi' + (quem ? ', ' + quem : '') + '! Tudo bem? Aqui é a ' + (id.persona || 'Nina') + ', da Goby.';
   const lista = Array.isArray(id.corridas) && id.corridas.length
     ? id.corridas.slice(0, 5).map((c) => '#' + c.codigo + (id.perfil === 'restaurante' ? ' (' + (c.etapa || 'em andamento') + ')' : (c.loja ? ' (' + limpa(c.loja) + ')' : ''))).join(', ')
     : '';
   // Só cumprimentou ("oi", "bom dia", "preciso de ajuda"): a resposta é FIXA, sem IA.
   if (soCumprimento && !blocoPendentes && id.aguardandoHumano !== true) {{
-    if (id.perfil === 'motoboy') saudacaoPronta = oi + ' O que você precisa?' + (lista ? '\\nCom você agora: ' + lista + '.' : '');
-    else if (id.perfil === 'restaurante') saudacaoPronta = oi + ' O que vocês precisam?' + (lista ? '\\nEm andamento agora: ' + lista + '.' : '');
-    else if (id.perfil === 'equipe') saudacaoPronta = oi + ' O que você precisa?';
+    // Motoboy: abre pela situação dele (corridas em aberto com a etapa) e pergunta se é sobre uma
+    // delas, pra ele não ter que explicar de novo quem é nem qual pedido.
+    if (id.perfil === 'motoboy') saudacaoPronta = oi + situacaoMotoboy();
+    else if (id.perfil === 'restaurante') saudacaoPronta = oi + ' Em que posso ajudar vocês?' + (lista ? '\\nEm andamento agora: ' + lista + '.' : '');
+    else if (id.perfil === 'equipe') saudacaoPronta = oi + ' Em que posso te ajudar?';
     else if (id.perfil === 'suporte') saudacaoPronta = 'Oi! Aqui é a Nina, modo suporte. Me manda o nome de quem você quer ver (entregador ou loja), o código do entregador ou o número de um pedido.';
     // Número desconhecido: o menu (1 - Motoboy, 2 - Restaurante) logo abaixo decide.
   }}
   blocoInicio = id.primeiroContato === true
-    ? 'PRIMEIRO CONTATO DE HOJE: comece com "' + oi + '" e, se a pessoa ainda não disse o que precisa, pergunte "O que você precisa?". Se ela já disse, cumprimente em poucas palavras e resolva.'
-    : 'SAUDAÇÃO: se não há conversa anterior no seu histórico, comece com "' + oi + '" (e, se a pessoa não disse o que precisa, pergunte "O que você precisa?"). Se já conversaram, não cumprimente de novo.';
+    ? 'PRIMEIRO CONTATO DE HOJE: comece com "' + oi + '" e, se a pessoa ainda não disse o que precisa, pergunte "Em que posso te ajudar?". Se ela já disse, cumprimente com carinho em poucas palavras e resolva.'
+    : 'SAUDAÇÃO: se não há conversa anterior no seu histórico, comece com "' + oi + '" (e, se a pessoa não disse o que precisa, pergunte "Em que posso te ajudar?"). Se já conversaram, não se apresente de novo.';
 }} else if (id.primeiroContato === false) {{
-  blocoInicio = 'VOCÊS JÁ CONVERSARAM HOJE: não cumprimente de novo nem se apresente; vá direto ao ponto.';
+  blocoInicio = 'VOCÊS JÁ CONVERSARAM HOJE: não se apresente de novo; responda com gentileza e vá ao ponto.';
   // Só "oi" de novo no mesmo dia (dono, 08/10/2026: "ela tá se perdendo em toda mensagem"): a IA,
   // proibida de cumprimentar de novo, devolvia texto vazio e saía "me perdi aqui". Resposta fixa,
   // curta, sem se apresentar.
   if (soCumprimento && !blocoPendentes && id.aguardandoHumano !== true) {{
     if (id.perfil === 'suporte') saudacaoPronta = 'Oi! Pode mandar: nome ou código do entregador, número do pedido, "vagas hoje" ou "quem não chegou".';
-    else if (id.perfil === 'restaurante') saudacaoPronta = 'Oi! O que vocês precisam?';
-    else if (id.perfil === 'motoboy' || id.perfil === 'equipe') saudacaoPronta = 'Oi' + ((nomeCadastro || nomeZap) ? ', ' + (nomeCadastro || nomeZap) : '') + '! O que você precisa?';
+    else if (id.perfil === 'restaurante') saudacaoPronta = 'Oi de novo! Em que posso ajudar vocês?';
+    else if (id.perfil === 'motoboy') saudacaoPronta = 'Oi de novo' + ((nomeCadastro || nomeZap) ? ', ' + (nomeCadastro || nomeZap) : '') + '!' + situacaoMotoboy();
+    else if (id.perfil === 'equipe') saudacaoPronta = 'Oi de novo' + ((nomeCadastro || nomeZap) ? ', ' + (nomeCadastro || nomeZap) : '') + '! Em que posso te ajudar?';
   }}
 }}
 
@@ -297,19 +316,25 @@ liga("Backend respondeu?", "Monta contexto", idx=0)
 liga("Monta contexto", "IA pausada?")
 
 # ── 4. Prompts ────────────────────────────────────────────────────────────────────────
+# Tom (dono, 08/10/2026): os motoboys acharam as respostas secas, "ignorantes". Antes: "Sem
+# introdução", "Respondeu, parou". Agora: curta, mas gentil — "por favor", empatia, primeiro nome.
 ESTILO = f"""ESTILO (o mais importante)
-- Responda primeiro o que perguntaram, em 1 ou 2 frases curtas. Sem introdução.
+- Seja EDUCADA e simpática, como uma atendente gentil que conhece a pessoa. Curta, mas nunca seca nem ríspida.
+- Responda o que perguntaram em 1 a 3 frases curtas. Pode começar com uma palavra gentil ("Claro!", "Certo,", "Entendi,", "Poxa,") e chamar pelo primeiro nome de vez em quando.
+- Use "por favor", "obrigada" e "pode deixar" quando couber. Pedindo algo: "Me manda o número do pedido, por favor?".
+- Problema ou reclamação: mostre que entendeu antes de responder ("Poxa, entendo. ...").
 - Uma pergunta por vez, e só se precisar.
-- Não termine com oferta genérica ("se precisar é só falar", "estou à disposição", "posso ajudar em algo mais?", "se quiser saber mais, me avise"). Respondeu, parou.
+- Não termine com oferta genérica e repetida ("estou à disposição", "posso ajudar em algo mais?"). Pode fechar com um toque gentil curto e variado quando fizer sentido ("Boa entrega! 🛵", "Bom trabalho!").
 - Não repita o que a pessoa disse nem anuncie o que vai fazer: faça.
 - Números diretos: "2 corridas entregues, 1 cancelada".
-- Cumprimente só se o bloco de PRIMEIRO CONTATO mandar. Depois, vá direto ao ponto.
+- Não se apresente de novo depois do primeiro contato.
 - Português simples do dia a dia, sem markdown, no máximo um emoji.
 
 Exemplos:
-Pergunta: "como vai minha semana?" → Bom: "Essa semana: 12 corridas entregues e 1 cancelada."
-Pergunta: "vcs são uma merda" → Bom: "Poxa, sinto muito. Me conta o que aconteceu que eu tento resolver."
-Pergunta: "obrigado" → Bom: "Por nada! 👍"
+Pergunta: "como vai minha semana?" → Bom: "Sua semana tá boa! 12 corridas entregues e 1 cancelada." / Ruim (seco): "12 entregues, 1 cancelada."
+Pergunta: "não consigo achar o cliente" → Bom: "Poxa, entendo. Me fala o número do pedido, por favor, que eu vejo o endereço pra você."
+Pergunta: "vcs são uma merda" → Bom: "Poxa, sinto muito por isso. Me conta o que aconteceu que eu tento resolver."
+Pergunta: "obrigado" → Bom: "Imagina! Boa entrega 🛵"
 
 REGRAS
 - Você é a {PERSONA}, assistente virtual da Goby. Se perguntarem, não finja ser pessoa.
@@ -341,7 +366,7 @@ SAÍDA: só o texto final para a pessoa ler, sem JSON e sem markdown. Termine co
 Quem está falando: {PRIMEIRO_NOME}.
 """
 
-ENTREGADOR = f"""=Você é a {PERSONA}, assistente virtual da GOBY, falando com um ENTREGADOR da Goby. Ele pode estar na rua: seja curta.
+ENTREGADOR = f"""=Você é a {PERSONA}, assistente virtual da GOBY, falando com um ENTREGADOR da Goby. Ele pode estar na rua: seja curta e gentil.
 
 {{{{ {CTX}.blocoQuem }}}}
 {{{{ {CTX}.blocoFila }}}}
@@ -351,7 +376,7 @@ ENTREGADOR = f"""=Você é a {PERSONA}, assistente virtual da GOBY, falando com 
 {{{{ {CTX}.blocoInicio }}}}
 
 COMEÇO DA CONVERSA: DESCUBRA O QUE ELE PRECISA
-- Cumprimento ou pedido vago ("preciso de ajuda", "tô com problema"): pergunte o que ele precisa e, se tiver, diga os pedidos em aberto com ele (#número e loja).
+- Cumprimento ou pedido vago ("preciso de ajuda", "tô com problema"): já abra pela situação dele — os pedidos em aberto com ele, um por linha (#número, loja e a etapa) — e pergunte se é sobre um deles ou outra coisa. Nenhum pedido em aberto: diga que ele não está com corrida agora e pergunte o que precisa.
 - Ele já disse o problema? Vá direto a ele: use o pedido certo da lista (ou "Buscar corrida" pelo número) e responda. Não pergunte de novo o que ele já disse.
 - Há mensagens pendentes acima? Responda cada uma em uma frase e depois a atual, numa resposta só.
 
@@ -395,7 +420,7 @@ PRIMEIRO: DESCUBRA QUEM É (pule se o bloco QUEM É acima disser que é da equip
 
 ENTREGADOR OU MOTOBOY DA GOBY
 - Peça nome e sobrenome e chame "Me identificar" com o que ela escreveu (nunca com o nome do WhatsApp, nunca sem ela ter escrito o nome).
-- vinculado true: cumprimente pelo primeiro nome e diga os pedidos em aberto que vieram (#número e loja); se ele já contou o problema, responda sobre o pedido certo; senão, pergunte o que aconteceu e com qual pedido.
+- vinculado true: cumprimente pelo primeiro nome e já diga como ele está agora — os pedidos em aberto que vieram, um por linha (#número, loja e etapa); se ele já contou o problema, responda sobre o pedido certo; senão, pergunte se é sobre um deles.
 - nome_incompleto ou ambiguo: peça o nome completo de novo (nome e sobrenome). Não cite nomes.
 - nao_encontrado: diga que não achou cadastro com esse nome e pergunte se quer falar com um atendente.
 - bloqueado, ja_identificado, ou a segunda falha seguida: diga que um atendente vai confirmar o cadastro por aqui e termine com [SUPORTE].
@@ -415,7 +440,7 @@ CLIENTE OU DÚVIDA GERAL (só quando a pessoa disse que é cliente ou só quer s
 
 {ESTILO}"""
 
-LOJA = f"""=Você é a {PERSONA}, assistente virtual da GOBY, falando com o RESTAURANTE {{{{ {CTX}.nome || 'parceiro' }}}} (loja parceira da Goby). Quem escreve está atendendo na loja: seja curta.
+LOJA = f"""=Você é a {PERSONA}, assistente virtual da GOBY, falando com o RESTAURANTE {{{{ {CTX}.nome || 'parceiro' }}}} (loja parceira da Goby). Quem escreve está atendendo na loja: seja curta e gentil.
 
 {{{{ {CTX}.blocoQuem }}}}
 {{{{ {CTX}.blocoFila }}}}
