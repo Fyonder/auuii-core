@@ -46,6 +46,9 @@ const cfg = {
     // Auuii, `auuii`, passou pra Nina). No painel vira a mesma conversa da Meta.
     evolutionDaMeta: process.env.EVOLUTION_DA_META || '',
     n8nWebhook: process.env.N8N_WEBHOOK_META || `http://n8n:5678/webhook/${process.env.META_INSTANCIA || 'goby'}`,
+    // Chat da Nina nos sites (goby-suporte, auuii-painel): a entrada de teste do fluxo responde
+    // na própria chamada, sem passar pelo WhatsApp.
+    n8nNinaWeb: process.env.N8N_WEBHOOK_NINA_WEB || 'http://n8n:5678/webhook/goby-teste',
 };
 
 function log(...partes) {
@@ -166,6 +169,12 @@ socket.on('meta', (corpo, ack) => {
     receberDaMeta(corpo).then(
         (r) => { if (typeof ack === 'function') ack(r); },
         (err) => { log(`❌ webhook da Meta: ${err.message}`); if (typeof ack === 'function') ack({ ok: false, erro: err.message }); },
+    );
+});
+socket.on('nina', (pergunta, ack) => {
+    perguntarANina(pergunta).then(
+        (r) => { if (typeof ack === 'function') ack(r); },
+        (err) => { log(`❌ chat da Nina: ${err.message}`); if (typeof ack === 'function') ack({ ok: false, erro: err.message }); },
     );
 });
 
@@ -341,6 +350,26 @@ async function enviarPelaMeta(numero, texto) {
     const ev = classificador.classificar(eventoDeEnvio({ instancia: cfg.metaInstancia, id: id || `meta-${Date.now()}`, numero, texto }));
     if (ev) enfileirar('evento', ev);
     return id;
+}
+
+// ─── Chat da Nina nos sites ────────────────────────────────────────────────────────
+//
+// backend ─'nina' (com ack)─▶ ponte ─▶ n8n /webhook/goby-teste ─▶ resposta no ack.
+// Quem é a pessoa (telefone confirmado por código ou equipe logada) o backend já decidiu.
+
+async function perguntarANina(pergunta) {
+    const telefone = String(pergunta?.telefone || '').replace(/\D/g, '');
+    const texto = String(pergunta?.texto || '').trim();
+    if (!/^\d{10,13}$/.test(telefone) || !texto) return { ok: false, erro: 'telefone e texto são obrigatórios' };
+    const resp = await fetch(cfg.n8nNinaWeb, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId: telefone, message: texto.slice(0, 2000) }),
+        signal: AbortSignal.timeout(60000),
+    });
+    const corpo = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { ok: false, erro: `n8n respondeu ${resp.status}` };
+    return { ok: true, resposta: String(corpo.reply || ''), handoff: corpo.handoff === true };
 }
 
 function responderJson(res, status, corpo) {

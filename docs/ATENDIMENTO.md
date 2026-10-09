@@ -299,6 +299,25 @@ formulário aceita o pooler (`aws-0-<regiao>.pooler.supabase.com`, usuário
 > pra ele** e pode ser desfeita no próximo ciclo. O interruptor existe pra quando a Goby
 > estiver no auuii-motoboy (decisão do dono, 03/10/2026). Por isso ele nasce desligado.
 
+## Chat da Nina nos sites (09/10/2026)
+
+Conversar com a Nina por um chat no site, sem WhatsApp:
+
+```
+site ─▶ backend ─'nina' (ack)─▶ ponte ─▶ n8n /webhook/goby-teste ─▶ resposta no ack
+```
+
+- **Goby Suporte** (Atendimento → ⚙️ → Falar com a Nina): `POST /api/admin/whatsapp/nina-web`
+  `{telefone, texto}`, permissão `whatsapp.write`. A equipe conversa como o número que escolher.
+- **auuii-painel** (chat flutuante → aba Nina): `POST /api/nina-web/codigo` → código de 6 dígitos
+  pelo WhatsApp da Auuii → `/confirmar` → sessão de 12 h → `/mensagem {sessao, texto}`. Exige
+  login Firebase sempre (mesmo com `ENFORCE_API_AUTH` desligado). O código existe porque a Nina
+  identifica pelo telefone: sem ele, qualquer um veria as corridas de qualquer motoboy.
+- O fluxo da Nina **não muda**: a entrada de teste (`Webhook (teste)`) já respondia na própria
+  chamada. Ela não junta mensagens seguidas e a conversa não vai pro painel.
+- Ponte: `socket.on('nina')` em `ponte/src/index.js`; endereço em `N8N_WEBHOOK_NINA_WEB`
+  (padrão `http://n8n:5678/webhook/goby-teste`).
+
 ## Ligar
 
 No `.env` deste PC:
