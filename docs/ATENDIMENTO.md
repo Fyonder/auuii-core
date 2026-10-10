@@ -308,15 +308,16 @@ site ─▶ backend ─'nina' (ack)─▶ ponte ─▶ n8n /webhook/goby-teste �
 ```
 
 - **Goby Suporte** (Atendimento → ⚙️ → Falar com a Nina): `POST /api/admin/whatsapp/nina-web`
-  `{telefone, texto}`, permissão `whatsapp.write`. A equipe conversa como o número que escolher.
+  `{texto}`, permissão `whatsapp.write`. Quem está logado fala **como o suporte** (modo suporte):
+  o backend manda o número do suporte (`SUPORTE_WHATSAPP` ou a equipe do robô) e o nome do staff,
+  que a Nina lê em `body.nome` (etapa 23 do gerador).
 - **auuii-painel** (chat flutuante → aba Nina): quem fala é o **restaurante**, achado pelo email
   do login (`empresas.email` da Goby; dono, 09/10). `GET /api/nina-web/loja` e
   `POST /api/nina-web/mensagem {texto}`. Exige login Firebase sempre e **email confirmado**
   (`email_verified`; sem isso qualquer um criaria a conta com o email da loja — o site oferece
   mandar o link). Cada usuário ganha um número só do site (`55 00 9…`, DDD que não existe) e a
   loja fica vinculada a ele em `goby_vinculos` (`origem: 'email'`), igual ao vínculo pelo CNPJ.
-- O fluxo da Nina **não muda**: a entrada de teste (`Webhook (teste)`) já respondia na própria
-  chamada. Ela não junta mensagens seguidas e a conversa não vai pro painel.
+- O fluxo usa a entrada de teste (`Webhook (teste)`), que responde na própria chamada. Ela não junta mensagens seguidas e a conversa não vai pro painel.
 - Ponte: `socket.on('nina')` em `ponte/src/index.js`; endereço em `N8N_WEBHOOK_NINA_WEB`
   (padrão `http://n8n:5678/webhook/goby-teste`).
 

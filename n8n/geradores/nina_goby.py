@@ -1519,6 +1519,23 @@ nodes["Avisar suporte"]["parameters"]["url"] = (
     "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.NINA_AVISO_INSTANCIA || 'auuii' }}"
 )
 
+# ── 23. Chat do Goby Suporte: quem está logado fala como o suporte, com o nome (dono, 09/10/2026) ─
+# "Não quero falar como um motoboy e sim pelo suporte que está autenticado, só precisa do nome."
+# O backend manda pela entrada de teste o número do suporte (é ele que liga o modo suporte e
+# libera as consultas da equipe) e `nome` = quem está no painel. No WhatsApp o nome é o pushName.
+for _a in nodes["Normaliza"]["parameters"]["assignments"]["assignments"]:
+    if _a["name"] == "nome" and "body?.nome" not in _a["value"]:
+        assert _a["value"] == "={{ $json.body?.data?.pushName ?? '' }}", _a["value"]
+        _a["value"] = "={{ $json.body?.data?.pushName ?? $json.body?.nome ?? '' }}"
+_js = nodes["Monta contexto"]["parameters"]["jsCode"]
+_alvo = "let blocoQuem = ehSuporte ? 'QUEM É: o WhatsApp do SUPORTE da Goby (equipe interna).' : '';"
+if "quemFalaNoSuporte" not in _js:
+    assert _js.count(_alvo) == 1, "Monta contexto mudou: ajuste a etapa 23"
+    nodes["Monta contexto"]["parameters"]["jsCode"] = _js.replace(_alvo,
+        "// Quem fala pelo suporte: no painel (entrada de teste) vem o nome de quem está logado.\n"
+        "const quemFalaNoSuporte = String($('Normaliza').first().json.nome || '').trim();\n"
+        "let blocoQuem = ehSuporte ? 'QUEM É: o SUPORTE da Goby (equipe interna)' + (quemFalaNoSuporte ? ', quem está escrevendo é ' + quemFalaNoSuporte + ' (trate pelo nome, não pergunte quem é)' : '') + '.' : '';")
+
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
 texto = json.dumps(f, ensure_ascii=False)
