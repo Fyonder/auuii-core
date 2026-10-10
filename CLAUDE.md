@@ -14,6 +14,10 @@ Documentação técnica em `docs/` (WhatsApp/IA: `docs/ATENDIMENTO.md`).
   `ferramentas:` no topo. Criou ou mudou uma função (ferramenta, regra, texto fixo, fluxo novo),
   atualize a nota dela no mesmo trabalho. O gerador roda `n8n/geradores/checa_obsidian_nina.py`
   no fim e avisa o que ficou pra trás; rode também à mão.
+- **Toda nota de função tem o "📣 Como explicar"** (`publico:` no topo + um bloco por público:
+  motoboy, restaurante, suporte), na linguagem de quem lê. Dele saem os guias de `Celebro 2/nina/Guias/`
+  (`n8n/geradores/guias_nina.py`, rodado pelo gerador; não edite os guias). Modelo:
+  `Celebro 2/nina/Modelo - nota de função.md`. Publicou a função? `status: no-ar`.
 - O JS do nó "Monta contexto" vive num f-string do Python: `\n` no JS é `\\n` no gerador e
   `{ }` viram `{{ }}`. Teste o JS gerado com `node` antes de publicar.
 - Trava do financeiro: nenhuma resposta da Nina tem valor em R$.
