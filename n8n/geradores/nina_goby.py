@@ -1519,6 +1519,65 @@ nodes["Avisar suporte"]["parameters"]["url"] = (
     "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.NINA_AVISO_INSTANCIA || 'auuii' }}"
 )
 
+# ── 25. Entrada de teste só com o segredo (09/10/2026) ──────────────────────────────────
+# O /webhook/goby-teste não tinha autenticação e o Normaliza usa o `chatId` do corpo como
+# telefone: quem soubesse a URL mandava { chatId: <número do suporte>, message: "dia dos
+# motoboys" } e recebia na resposta HTTP o modo suporte (nomes, telefones, corridas, vagas).
+# Agora a entrada só segue com o header `x-nina-segredo` igual a NINA_TESTE_SEGREDO (no .env do
+# Kali, pro n8n e pra ponte). Sem a variável (ou curta), recusa tudo. Recusado volta
+# { ignorado: true } sem passar por nenhum nó que chama o backend.
+# Quem usa a entrada: a ponte (chat da Nina nos sites e a Nina do painel, `canal: 'painel'`) e o
+# curl de "Como mudar e publicar a Nina" no Obsidian. O Webhook da Evolution (/goby) não muda.
+SEGREDO_CONFERE = (
+    "={{ (() => { const s = String($env.NINA_TESTE_SEGREDO || ''); "
+    "const h = String(($json.headers || {})['x-nina-segredo'] || ''); "
+    "return s.length >= 16 && h === s; })() }}"
+)
+wx, wy = nodes["Webhook (teste)"]["position"]
+add_node({
+    "parameters": {
+        "conditions": {
+            "options": {"caseSensitive": True, "leftValue": "", "typeValidation": "loose", "version": 2},
+            "conditions": [{
+                "id": "segredo-teste", "leftValue": SEGREDO_CONFERE, "rightValue": "",
+                "operator": {"type": "boolean", "operation": "true", "singleValue": True},
+            }],
+            "combinator": "and",
+        },
+        "looseTypeValidation": True,
+        "options": {},
+    },
+    "name": "Teste com segredo?",
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2.2,
+    "position": [wx, wy + 200],
+    "notesInFlow": True,
+    "notes": "x-nina-segredo = NINA_TESTE_SEGREDO (ponte e curl de teste)",
+    "id": novo_id(),
+})
+add_node({
+    "parameters": {
+        "assignments": {"assignments": [
+            {"id": "tr1", "name": "ignorado", "type": "boolean", "value": "={{ true }}"},
+            {"id": "tr2", "name": "motivo", "type": "string", "value": "entrada de teste sem o segredo (x-nina-segredo)"},
+        ]},
+        "options": {},
+    },
+    "name": "Teste recusado",
+    "type": "n8n-nodes-base.set",
+    "typeVersion": 3.4,
+    "position": [wx + 208, wy + 300],
+    "notesInFlow": True,
+    "notes": "devolve só { ignorado, motivo } no HTTP",
+    "id": novo_id(),
+})
+conn["Webhook (teste)"] = {"main": [[{"node": "Teste com segredo?", "type": "main", "index": 0}]]}
+conn["Teste com segredo?"] = {"main": [
+    [{"node": "Humano pelo aparelho?", "type": "main", "index": 0}],
+    [{"node": "Teste recusado", "type": "main", "index": 0}],
+]}
+nodes["Webhook (teste)"]["notes"] = "ponte (chat dos sites) e curl de teste: exige x-nina-segredo; devolve a resposta"
+
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
 texto = json.dumps(f, ensure_ascii=False)
@@ -1588,6 +1647,13 @@ for _n in ("Entregador?", "Restaurante?"):
 assert "$('Identificar').first().json.perfil" not in json.dumps([nodes[x] for x in ("Entregador?", "Restaurante?", "Saudação", "Pede texto", "Prepara envio")], ensure_ascii=False)
 assert [d["node"] for d in conn["Monta contexto"]["main"][0]] == ["IA pausada?"]
 assert f["id"] == "goby4nVKd88YaJIL"
+# Entrada de teste (etapa 25): só passa com o segredo; nada além do portão sai do webhook.
+assert [[d["node"] for d in o] for o in conn["Webhook (teste)"]["main"]] == [["Teste com segredo?"]]
+assert [[d["node"] for d in o] for o in conn["Teste com segredo?"]["main"]] == [["Humano pelo aparelho?"], ["Teste recusado"]]
+assert "Teste recusado" not in conn
+assert "NINA_TESTE_SEGREDO" in SEGREDO_CONFERE and "s.length >= 16" in SEGREDO_CONFERE
+assert nodes["Webhook (teste)"]["parameters"]["path"] == "goby-teste"
+assert [[d["node"] for d in o] for o in conn["Webhook"]["main"]] == [["Humano pelo aparelho?"]]
 for tool in ("Me identificar", "Retirar pedido", "Identificar restaurante"):
     assert "$fromAI" in nodes[tool]["parameters"]["jsonBody"]
 for tool in ("Pedidos da loja", "Pedido da loja", "Semana da loja"):

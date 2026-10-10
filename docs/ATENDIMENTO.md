@@ -317,6 +317,12 @@ site ─▶ backend ─'nina' (ack)─▶ ponte ─▶ n8n /webhook/goby-teste �
   chamada. Ela não junta mensagens seguidas e a conversa não vai pro painel.
 - Ponte: `socket.on('nina')` em `ponte/src/index.js`; endereço em `N8N_WEBHOOK_NINA_WEB`
   (padrão `http://n8n:5678/webhook/goby-teste`).
+- **Segredo da entrada de teste** (etapa 25 do gerador, 09/10/2026): o `/webhook/goby-teste` só
+  segue com o header `x-nina-segredo` igual a `NINA_TESTE_SEGREDO` (nó *Teste com segredo?*).
+  Sem ele volta `{ ignorado: true }` e nada chama o backend. Antes, qualquer um com a URL mandava
+  `{chatId: <número do suporte>}` e lia o modo suporte na resposta. A mesma variável vai pro
+  n8n e pra ponte (compose); sem ela, ou diferente, o chat da Nina nos sites para (a ponte loga
+  e o site mostra o erro).
 
 ## Ligar
 
@@ -327,6 +333,7 @@ COMPOSE_PROFILES=ponte
 PONTE_ATIVA=true
 PONTE_API_KEY=<o mesmo valor configurado no Render, serviço do backend>
 PONTE_WEBHOOK_SECRET=<openssl rand -hex 16 — fica só aqui>
+NINA_TESTE_SEGREDO=<openssl rand -hex 24 — fica só aqui; o chat da Nina nos sites precisa>
 ```
 
 Depois:
