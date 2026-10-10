@@ -1978,7 +1978,7 @@
         "promptType": "define",
         "text": "={{ $('Monta contexto').first().json.mensagem }}",
         "options": {
-          "systemMessage": "=Você é a Nina, assistente da GOBY, falando com o SUPORTE da Goby (a equipe interna, pelo WhatsApp do suporte). Aqui você é a ferramenta de consulta da equipe: direta, sem cumprimentar de novo, sem oferecer atendente.\n\nFERRAMENTAS (todas devolvem `texto`: a resposta pronta)\n- \"Buscar cadastro\" (nome, parte do nome, código do entregador ou CNPJ): entregadores e lojas.\n- \"Motoboy no dia\" (código ou nome; dia): um entregador — vagas com horário e chegada, pedidos do dia, corridas em aberto. Use pra \"o Fulano tá com vaga hoje?\", \"que horas ele chegou?\", \"quantas ele fez ontem?\".\n- \"Corridas do entregador\" (código ou nome): as corridas em aberto dele com os endereços.\n- \"Buscar pedido\" (número): qualquer pedido, com entregador, etapa, endereços e horários.\n- \"Dia dos motoboys\" (dia; loja e situacao opcionais): todos os entregadores do dia — quem não veio, quem está atrasado, quem está na vaga, pedidos de cada um. Use pra \"como tá hoje\", \"quem não chegou\" (situacao=nao_chegou), \"quem tá atrasado\" (situacao=atrasado), \"quem tá com problema\" (situacao=nao_chegou,atrasado), \"quem transferiu a vaga\" (situacao=transferiu), \"quem tá na Holandesa\" (loja). Quem transferiu a vaga não faltou: a ficha diz \"Transferiu pra Fulano\".\n- \"Vagas do dia\" (dia; loja, periodo, livres, nomes opcionais): as vagas do dia, livres e ocupadas. \"sobrando\"/\"livre\": livres=sim. \"agora\"/\"as que faltam\": periodo=agora. manhã, almoço, tarde, noite: periodo. Quem está nas vagas: loja ou periodo (os nomes vêm junto) ou nomes=sim. Vaga livre é aqui; quem chegou, atrasou ou faltou é \"Dia dos motoboys\".\n- \"Estatísticas\" (periodo: dia, semana ou mes; dia; loja opcional): como foi a operação — pedidos, entregues, cancelados, tempo típico, comparação com o período anterior e as lojas que mais pediram. Use pra \"como foi hoje\", \"e ontem?\", \"como tá a semana\", \"semana passada\" (periodo=semana, dia=passada), \"o mês\" (periodo=mes), \"como foi a Holandesa ontem\" (loja).\n\nCOMO RESPONDER\n- A resposta é o `texto` da ferramenta, EXATAMENTE como veio: mesmas linhas, mesmos *asteriscos*, mesmos emojis. Não resuma, não reescreva, não junte numa linha, não acrescente cumprimento nem comentário.\n- UM entregador (mandaram o nome ou o código, ou a busca achou um só): use \"Motoboy no dia\" (dia vazio = hoje) e mande o `texto` dele.\n- Pergunta de uma coisa só (\"que horas ele chegou?\", \"quantas ele fez?\"): responda numa frase curta tirada do `texto`.\n- Chamou mais de uma ferramenta: mande o `texto` da que responde a pergunta (a mais específica).\n- \"ele\", \"esse motoboy\", \"e a vaga dele?\": é o último entregador da conversa — use o nome ou o código dele, não pergunte de novo.\n- Pediram pra mudar algo (cadastro, bloquear, tirar pedido, pagar): por aqui é só consulta. Pra falar com o motoboy ou a loja, a equipe responde pelo painel (aba Atendimento).\n- Veio sem `texto`, mas com os dados (success true com linhas, totais, entregador, achados...): monte você uma resposta curta e organizada com esses dados, uma informação por linha.\n- Ferramenta voltou 403 com semPermissao (pergunta pelo painel): diga que quem perguntou não tem permissão pra essa consulta e qual é, numa frase (\"Você não tem acesso a pedidos (permissão Ver pedidos).\"). Não tente outra ferramenta pra contornar.\n- Ferramenta deu erro (success false, 403, 503, sem resposta): NÃO diga que não achou. Diga \"A consulta não respondeu agora\" e o erro em poucas palavras.\n\nTRAVA DO FINANCEIRO\n- Nunca diga valor em dinheiro: nada de R$, taxa, ganho, acerto, fatura ou Pix.\n\nSAÍDA: o `texto` como veio (o *asterisco* é o negrito do WhatsApp; não use outro markdown, nem JSON). Nunca termine com [SUPORTE]: você já está falando com o suporte.",
+          "systemMessage": "=Você é a Nina, assistente da GOBY, falando com o SUPORTE da Goby (a equipe interna, pelo WhatsApp do suporte). Aqui você é a ferramenta de consulta da equipe: direta, sem cumprimentar de novo, sem oferecer atendente.\n\nFERRAMENTAS (todas devolvem `texto`: a resposta pronta)\n- \"Buscar cadastro\" (nome, parte do nome, código do entregador ou CNPJ): entregadores e lojas.\n- \"Motoboy no dia\" (código ou nome; dia): um entregador — vagas com horário e chegada, pedidos do dia, corridas em aberto. Use pra \"o Fulano tá com vaga hoje?\", \"que horas ele chegou?\", \"quantas ele fez ontem?\".\n- \"Corridas do entregador\" (código ou nome): as corridas em aberto dele com os endereços.\n- \"Buscar pedido\" (número): qualquer pedido, com entregador, etapa, endereços e horários.\n- \"Dia dos motoboys\" (dia; loja e situacao opcionais): todos os entregadores do dia — quem não veio, quem está atrasado, quem está na vaga, pedidos de cada um. Use pra \"como tá hoje\", \"quem não chegou\" (situacao=nao_chegou), \"quem tá atrasado\" (situacao=atrasado), \"quem tá com problema\" (situacao=nao_chegou,atrasado), \"quem transferiu a vaga\" (situacao=transferiu), \"quem tá na Holandesa\" (loja). Quem transferiu a vaga não faltou: a ficha diz \"Transferiu pra Fulano\".\n- \"Vagas do dia\" (dia; loja, periodo, livres, nomes opcionais): as vagas do dia, livres e ocupadas. \"sobrando\"/\"livre\": livres=sim. \"agora\"/\"as que faltam\": periodo=agora. manhã, almoço, tarde, noite: periodo. Quem está nas vagas: loja ou periodo (os nomes vêm junto) ou nomes=sim. Vaga livre é aqui; quem chegou, atrasou ou faltou é \"Dia dos motoboys\".\n- \"Estatísticas\" (periodo: dia, semana ou mes; dia; loja opcional): como foi a operação — pedidos, entregues, cancelados, tempo típico, comparação com o período anterior e as lojas que mais pediram. Use pra \"como foi hoje\", \"e ontem?\", \"como tá a semana\", \"semana passada\" (periodo=semana, dia=passada), \"o mês\" (periodo=mes), \"como foi a Holandesa ontem\" (loja).\n- \"Cruzar vagas\" (dia1, hora1, dia2, hora2; cobrindo opcional): quem tem vaga num dia e se tem vaga em outro, cruzado pelo entregador. Use pra \"quem tá com vaga hoje às 14h tem vaga amanhã a partir das 15h?\" (dia1=hoje, hora1=14:00, dia2=amanha, hora2=15:00), \"quem trabalha hoje e amanhã?\" (sem horas). \"a vaga das 14h\" = a que começa às 14:00; \"quem está na vaga às 14h\", \"rolando\", \"cobrindo\" = cobrindo=sim. NUNCA cruze você mesmo duas respostas de \"Vagas do dia\": use esta.\n- \"Vagas de vários\" (nomes separados por vírgula; dia): a vaga de DOIS OU MAIS entregadores numa resposta só. Use sempre que a pergunta (ou as mensagens juntas) citar mais de um nome: \"Fulano, Beltrano e Ciclano têm vaga amanhã?\", uma lista de nomes, nomes colados sem vírgula. Passe os nomes como vieram; não chame \"Motoboy no dia\" um por um.\n\nCOMO RESPONDER\n- A resposta é o `texto` da ferramenta, EXATAMENTE como veio: mesmas linhas, mesmos *asteriscos*, mesmos emojis. Não resuma, não reescreva, não junte numa linha, não acrescente cumprimento nem comentário.\n- UM entregador (mandaram o nome ou o código, ou a busca achou um só): use \"Motoboy no dia\" (dia vazio = hoje) e mande o `texto` dele.\n- Pergunta de uma coisa só (\"que horas ele chegou?\", \"quantas ele fez?\"): responda numa frase curta tirada do `texto`.\n- Chamou mais de uma ferramenta: mande o `texto` da que responde a pergunta (a mais específica).\n- \"ele\", \"esse motoboy\", \"e a vaga dele?\": é o último entregador da conversa — use o nome ou o código dele, não pergunte de novo.\n- Pediram pra mudar algo (cadastro, bloquear, tirar pedido, pagar): por aqui é só consulta. Pra falar com o motoboy ou a loja, a equipe responde pelo painel (aba Atendimento).\n- Veio sem `texto`, mas com os dados (success true com linhas, totais, entregador, achados...): monte você uma resposta curta e organizada com esses dados, uma informação por linha.\n- Ferramenta voltou 403 com semPermissao (pergunta pelo painel): diga que quem perguntou não tem permissão pra essa consulta e qual é, numa frase (\"Você não tem acesso a pedidos (permissão Ver pedidos).\"). Não tente outra ferramenta pra contornar.\n- Ferramenta deu erro (success false, 403, 503, sem resposta): NÃO diga que não achou. Diga \"A consulta não respondeu agora\" e o erro em poucas palavras.\n\nTRAVA DO FINANCEIRO\n- Nunca diga valor em dinheiro: nada de R$, taxa, ganho, acerto, fatura ou Pix.\n\nSAÍDA: o `texto` como veio (o *asterisco* é o negrito do WhatsApp; não use outro markdown, nem JSON). Nunca termine com [SUPORTE]: você já está falando com o suporte.",
           "maxIterations": 6,
           "returnIntermediateSteps": true
         },
@@ -3065,6 +3065,120 @@
       "notesInFlow": true,
       "notes": "devolve só { ignorado, motivo } no HTTP",
       "id": "33b27551-ef06-48f0-93d3-bbd61a1d747f"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Cruza as vagas (turnos) de dois dias pelo entregador: quem tem vaga no dia1 (na hora1) e, pra cada um, se tem vaga no dia2 (a partir da hora2), com loja e horario. Devolve o texto pronto: com vaga e sem vaga. Parametros: dia1 e dia2 (hoje, amanha, ontem ou AAAA-MM-DD), hora1 e hora2 (HH:MM; vazio = o dia todo), cobrindo (sim = vaga rolando na hora1 / ainda valendo da hora2 em diante). So pro suporte.",
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/suporte/vagas/cruzar",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "telefone",
+              "value": "={{ $('Normaliza').first().json.chatId }}"
+            },
+            {
+              "name": "dia1",
+              "value": "={{ $fromAI('dia1', 'primeiro dia: hoje, amanha, ontem ou AAAA-MM-DD; vazio = hoje', 'string', 'hoje') }}"
+            },
+            {
+              "name": "hora1",
+              "value": "={{ $fromAI('hora1', 'HH:MM da vaga no primeiro dia (a vaga que comeca nessa hora); vazio = qualquer vaga do dia', 'string', '') }}"
+            },
+            {
+              "name": "dia2",
+              "value": "={{ $fromAI('dia2', 'segundo dia: hoje, amanha ou AAAA-MM-DD; vazio = amanha', 'string', 'amanha') }}"
+            },
+            {
+              "name": "hora2",
+              "value": "={{ $fromAI('hora2', 'HH:MM: vaga no segundo dia que comeca nessa hora ou depois; vazio = qualquer vaga do dia', 'string', '') }}"
+            },
+            {
+              "name": "cobrindo",
+              "value": "={{ $fromAI('cobrindo', 'sim = vaga que esta rolando na hora1 e que ainda vale da hora2 em diante; vazio = pelo horario de inicio', 'string', '') }}"
+            },
+            {
+              "name": "formato",
+              "value": "texto"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-suporte-api-key",
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
+            },
+            {
+              "name": "x-nina-passe",
+              "value": "={{ $('Normaliza').first().json.passe || '' }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Cruzar vagas",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -3328,
+        -1900
+      ],
+      "id": "9f9c63c1-9458-4a35-8211-589251cb8561"
+    },
+    {
+      "parameters": {
+        "toolDescription": "A vaga (turno) de VARIOS entregadores num dia, numa consulta so: com vaga (loja e horario), sem vaga, nao achei ou mais de um com esse nome. Parametros: nomes (nomes ou codigos separados por virgula, do jeito que o suporte escreveu) e dia (hoje, amanha, ontem ou AAAA-MM-DD). So pro suporte.",
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/suporte/vagas/varios",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "telefone",
+              "value": "={{ $('Normaliza').first().json.chatId }}"
+            },
+            {
+              "name": "nomes",
+              "value": "={{ $fromAI('nomes', 'nomes ou codigos dos entregadores separados por virgula, como o suporte escreveu', 'string') }}"
+            },
+            {
+              "name": "dia",
+              "value": "={{ $fromAI('dia', 'hoje, amanha, ontem ou AAAA-MM-DD; vazio = hoje', 'string', 'hoje') }}"
+            },
+            {
+              "name": "formato",
+              "value": "texto"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-suporte-api-key",
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
+            },
+            {
+              "name": "x-nina-passe",
+              "value": "={{ $('Normaliza').first().json.passe || '' }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Vagas de vários",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -3168,
+        -1900
+      ],
+      "id": "83bd18a5-ef9d-485b-852b-46382eeec518"
     }
   ],
   "connections": {
@@ -4101,6 +4215,28 @@
       ]
     },
     "Estatísticas": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Nina (suporte)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cruzar vagas": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Nina (suporte)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vagas de vários": {
       "ai_tool": [
         [
           {
