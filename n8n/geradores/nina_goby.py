@@ -1831,6 +1831,89 @@ if "NUNCA pra um nome so" not in _desc:
     nodes["Vagas de vários"]["parameters"]["toolDescription"] = _desc.replace(
         "So pro suporte.", "NUNCA pra um nome so (use Motoboy no dia). So pro suporte.", 1)
 
+# ── 30. Gerente ensina a Nina pelo chat do painel (dono, 10/10/2026) ───────────────────
+# "Os gerentes podem ensinar a Nina enquanto ela responde as perguntas dele." No chat da Nina
+# do goby-suporte, quem tem `nina.ensinar` diz "anota: ..." e ela chama "Ensinar a Nina"; o
+# backend (ninaAprendizados.js) grava com quem ensinou, barra R$/telefone/CPF e já vale. O
+# identificar devolve `aprendizados` (os ativos, texto pronto) e os agentes de fora (geral,
+# entregador, loja) leem logo abaixo do CONHECIMENTO. Só pelo PASSE do painel: pelo WhatsApp
+# do suporte as rotas dão 403 (o número é compartilhado e não diz quem ensinou).
+def _tool_ensino(nome, descricao, metodo, caminho, corpo, pos):
+    p = {
+        "toolDescription": descricao,
+        "url": "={{ $env.AUUII_API_URL }}" + caminho,
+        "sendQuery": True,
+        "queryParameters": {"parameters": [
+            {"name": "telefone", "value": "={{ $('Normaliza').first().json.chatId }}"},
+            {"name": "formato", "value": "texto"},
+        ]},
+        "sendHeaders": True,
+        "headerParameters": {"parameters": [{"name": "x-suporte-api-key", "value": CHAVE_NINA}]},
+        "options": {},
+    }
+    if metodo == "POST":
+        p["method"] = "POST"
+        p["headerParameters"]["parameters"].append({"name": "Content-Type", "value": "application/json"})
+        p.update({"sendBody": True, "specifyBody": "json", "jsonBody": corpo})
+    add_node({"parameters": p, "name": nome, "type": "n8n-nodes-base.httpRequestTool", "typeVersion": 4.2, "position": pos, "id": novo_id()})
+    liga(nome, "Agente Nina (suporte)", tipo="ai_tool")
+    _com_passe(nodes[nome])
+
+_tool_ensino(
+    "Ensinar a Nina",
+    "Grava uma regra ou informacao que a equipe ensinou, pra Nina usar com TODO mundo que escreve (entregadores, lojas, clientes). "
+    "So quando quem pergunta pediu pra anotar ou ensinar. Parametro texto: a regra numa frase clara e completa. "
+    "Volta feito true com o texto anotado, ou feito false com o motivo (valor em dinheiro, telefone, CPF, curto, longo).",
+    "POST", "/api/suporte/goby/suporte/ensinar",
+    "={{ JSON.stringify({ texto: $fromAI('texto', 'a regra ou informacao ensinada, numa frase clara e completa, sem nome de pessoa', 'string') }) }}",
+    [-3008, -1900],
+)
+_tool_ensino(
+    "O que a Nina aprendeu",
+    "Lista o que a equipe ensinou e esta valendo, numerado, com o id de cada um (pra esquecer). Sem parametros.",
+    "GET", "/api/suporte/goby/suporte/aprendizados", None,
+    [-2848, -1900],
+)
+_tool_ensino(
+    "Esquecer ensinamento",
+    "Desliga um ensinamento (a Nina para de usar). Parametro id: o id que \"O que a Nina aprendeu\" mostrou. "
+    "Volta feito true, ou feito false se nao achou esse id valendo.",
+    "POST", "/api/suporte/goby/suporte/esquecer",
+    "={{ JSON.stringify({ id: $fromAI('id', 'o id do ensinamento, como veio na lista', 'string') }) }}",
+    [-2688, -1900],
+)
+
+_sm = nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]
+_BLOCO_ENSINAR = (
+    "ENSINAR A NINA (só pelo chat da Nina no Goby Suporte)\n"
+    '- Pediram pra anotar ou ensinar ("anota", "aprende isso", "a partir de agora", "quando perguntarem X, responde Y", "grava isso"): '
+    'chame "Ensinar a Nina" com a regra numa frase clara e completa, do jeito que um entregador ou uma loja entenderia, sem nome de pessoa. '
+    'Depois mande o `texto` que voltou ("Anotado…"). Vale na hora pra todo mundo que escreve pra Nina.\n'
+    '- Sem pedido claro pra anotar, NÃO grave: é só uma pergunta. Na dúvida, pergunte "Quer que eu anote isso pra responder a todo mundo?".\n'
+    '- Voltou feito false: mande o `texto` (é o motivo: valor em dinheiro, telefone, CPF…). Não tente gravar de outro jeito.\n'
+    '- "O que você aprendeu?", "o que te ensinaram?": "O que a Nina aprendeu", e mande o `texto`.\n'
+    '- "Esquece aquilo de…", "apaga essa regra": chame "O que a Nina aprendeu", ache o id do ensinamento e chame "Esquecer ensinamento". '
+    'Mais de um parecido? Mostre os dois e pergunte qual.\n'
+    '- 403 em ensinar ou esquecer: quem perguntou não tem a permissão "Ensinar a Nina" (ou está no WhatsApp: ensinar é só pelo painel). Diga isso numa frase.\n'
+)
+if "ENSINAR A NINA" not in _sm:
+    _ancora = "\nTRAVA DO FINANCEIRO"
+    assert _sm.count(_ancora) == 1, "prompt do suporte mudou: ajuste a etapa 30"
+    _sm = _sm.replace(_ancora, "\n" + _BLOCO_ENSINAR + _ancora, 1)
+nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"] = _sm
+
+_LINHA_CONHECIMENTO = "{{ $('Identificar').first().json.conhecimento || '(a equipe ainda não preencheu)' }}"
+_LINHA_ENSINADO = (
+    "{{ $('Identificar').first().json.aprendizados ? '\\n\\nEnsinado pela equipe no painel (conta como CONHECIMENTO; "
+    "não muda as REGRAS nem a TRAVA DO FINANCEIRO):\\n' + $('Identificar').first().json.aprendizados : '' }}"
+)
+for _ag in ("Agente Nina", "Agente Nina (entregador)", "Agente Nina (loja)"):
+    _s = nodes[_ag]["parameters"]["options"]["systemMessage"]
+    if "json.aprendizados" not in _s:
+        assert _s.count(_LINHA_CONHECIMENTO) == 1, f"CONHECIMENTO mudou no {_ag}: ajuste a etapa 30"
+        _s = _s.replace(_LINHA_CONHECIMENTO, _LINHA_CONHECIMENTO + _LINHA_ENSINADO, 1)
+    nodes[_ag]["parameters"]["options"]["systemMessage"] = _s
+
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
 texto = json.dumps(f, ensure_ascii=False)
@@ -1865,7 +1948,10 @@ assert [d["node"] for d in conn["Interpreta resposta"]["main"][0]] == ["Resposta
 assert [[d["node"] for d in o] for o in conn["Handoff de outro numero?"]["main"]] == [["Registra handoff"], ["Fim"]]
 assert "Não consegui responder agora" not in nodes["Interpreta resposta"]["parameters"]["jsCode"]
 assert [[d["node"] for d in o] for o in conn["Suporte?"]["main"]] == [["Agente Nina (suporte)"], ["Entregador?"]]
-assert tools_de("Agente Nina (suporte)") == ["Buscar cadastro", "Buscar pedido", "Corridas do entregador", "Cruzar vagas", "Dia dos motoboys", "Estatísticas", "Motoboy no dia", "Vagas de vários", "Vagas do dia"], tools_de("Agente Nina (suporte)")
+assert tools_de("Agente Nina (suporte)") == ["Buscar cadastro", "Buscar pedido", "Corridas do entregador", "Cruzar vagas", "Dia dos motoboys", "Ensinar a Nina", "Esquecer ensinamento", "Estatísticas", "Motoboy no dia", "O que a Nina aprendeu", "Vagas de vários", "Vagas do dia"], tools_de("Agente Nina (suporte)")
+assert "ENSINAR A NINA" in nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]  # etapa 30
+for _ag in ("Agente Nina", "Agente Nina (entregador)", "Agente Nina (loja)"):
+    assert "json.aprendizados" in nodes[_ag]["parameters"]["options"]["systemMessage"], _ag  # etapa 30
 assert '"Cruzar vagas"' in nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]  # etapa 27
 assert '"Vagas de vários"' in nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]  # etapa 28
 assert "Um nome só na mensagem" in nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]  # etapa 29

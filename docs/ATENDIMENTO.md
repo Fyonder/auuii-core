@@ -332,6 +332,27 @@ site ─▶ backend ─'nina' (ack)─▶ ponte ─▶ n8n /webhook/goby-teste �
   n8n e pra ponte (compose); sem ela, ou diferente, o chat da Nina nos sites para (a ponte loga
   e o site mostra o erro).
 
+## Gerente ensina a Nina (10/10/2026)
+
+No chat da Nina do Goby Suporte, quem tem `nina.ensinar` diz "anota: ..." e ela grava (etapa 29
+do gerador). Vale na hora pra todo mundo que escreve pra Nina.
+
+```
+gerente ─"anota: …"─▶ Nina (modo suporte, passe) ─▶ POST /api/suporte/goby/suporte/ensinar
+                                                     └─▶ Firestore nina_aprendizados
+motoboy/loja/cliente ─▶ identificar ─ `aprendizados` ─▶ prompt, logo abaixo do CONHECIMENTO
+```
+
+- Ferramentas do **Agente Nina (suporte)**: *Ensinar a Nina*, *O que a Nina aprendeu*, *Esquecer
+  ensinamento*. As rotas só aceitam o passe do painel (`x-nina-passe`): pelo WhatsApp do suporte
+  dão 403, porque o número é compartilhado e não diz quem ensinou.
+- O backend barra valor em dinheiro, telefone, CPF e e-mail, e devolve `feito:false` com o motivo
+  (a Nina repete). Esquecer desliga, não apaga.
+- `nina.ensinar` não nasce com o suporte: dar à mão aos gerentes. Ver a lista pede `nina.chat`.
+- Tela: Atendimento → **O que a Nina aprendeu** (`GET/POST/DELETE /api/admin/nina/aprendizados`).
+- Fluxo novo com backend velho: as 3 ferramentas dão 404 (a Nina diz que a consulta não
+  respondeu) e `aprendizados` vem vazio. Ordem: backend → fluxo → painel.
+
 ## Ligar
 
 No `.env` deste PC:
