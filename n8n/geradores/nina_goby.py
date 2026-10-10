@@ -1712,6 +1712,58 @@ if "Etapa 26" not in _code:
     assert _code.count(_VELHO_PRONTO) == 1, "Interpreta resposta mudou: ajuste a etapa 26"
     nodes["Interpreta resposta"]["parameters"]["jsCode"] = _code.replace(_VELHO_PRONTO, _NOVO_PRONTO)
 
+# ── 27. Suporte: cruzar as vagas de dois dias (dono, 10/10/2026) ─────────────────────────
+# "Vê quem está com vaga hoje às 14:00 e cruza com as vagas de amanhã pra ver se tem vaga a
+# partir das 15:00." Com "Vagas do dia" a IA cruzava duas listas de cabeça, pelo nome curto
+# (dois João viram um) e com a lista cortada em 40. O backend (GET /goby/suporte/vagas/cruzar,
+# gobySuporte.cruzarVagasParaSuporte) cruza pelo id do entregador e devolve o `texto` pronto.
+# Padrão: hora1 = vaga que COMEÇA nessa hora; hora2 = começa nessa hora ou depois.
+# cobrindo=sim: hora1 = vaga rolando nessa hora; hora2 = vaga que ainda vale dessa hora em diante.
+add_node({
+    "parameters": {
+        "toolDescription": (
+            "Cruza as vagas (turnos) de dois dias pelo entregador: quem tem vaga no dia1 (na hora1) e, pra cada um, "
+            "se tem vaga no dia2 (a partir da hora2), com loja e horario. Devolve o texto pronto: com vaga e sem vaga. "
+            "Parametros: dia1 e dia2 (hoje, amanha, ontem ou AAAA-MM-DD), hora1 e hora2 (HH:MM; vazio = o dia todo), "
+            "cobrindo (sim = vaga rolando na hora1 / ainda valendo da hora2 em diante). So pro suporte."
+        ),
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/suporte/vagas/cruzar",
+        "sendQuery": True,
+        "queryParameters": {"parameters": [
+            {"name": "telefone", "value": "={{ $('Normaliza').first().json.chatId }}"},
+            {"name": "dia1", "value": "={{ $fromAI('dia1', 'primeiro dia: hoje, amanha, ontem ou AAAA-MM-DD; vazio = hoje', 'string', 'hoje') }}"},
+            {"name": "hora1", "value": "={{ $fromAI('hora1', 'HH:MM da vaga no primeiro dia (a vaga que comeca nessa hora); vazio = qualquer vaga do dia', 'string', '') }}"},
+            {"name": "dia2", "value": "={{ $fromAI('dia2', 'segundo dia: hoje, amanha ou AAAA-MM-DD; vazio = amanha', 'string', 'amanha') }}"},
+            {"name": "hora2", "value": "={{ $fromAI('hora2', 'HH:MM: vaga no segundo dia que comeca nessa hora ou depois; vazio = qualquer vaga do dia', 'string', '') }}"},
+            {"name": "cobrindo", "value": "={{ $fromAI('cobrindo', 'sim = vaga que esta rolando na hora1 e que ainda vale da hora2 em diante; vazio = pelo horario de inicio', 'string', '') }}"},
+            {"name": "formato", "value": "texto"},
+        ]},
+        "sendHeaders": True,
+        "headerParameters": {"parameters": [{"name": "x-suporte-api-key", "value": CHAVE_NINA}]},
+        "options": {"timeout": 30000},
+    },
+    "name": "Cruzar vagas",
+    "type": "n8n-nodes-base.httpRequestTool",
+    "typeVersion": 4.2,
+    "position": [-3328, -1900],
+    "id": novo_id(),
+})
+liga("Cruzar vagas", "Agente Nina (suporte)", tipo="ai_tool")
+_com_passe(nodes["Cruzar vagas"])
+
+_sm = nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]
+_FERRAMENTA_CRUZAR = (
+    '- "Cruzar vagas" (dia1, hora1, dia2, hora2; cobrindo opcional): quem tem vaga num dia e se tem vaga em outro, cruzado pelo '
+    'entregador. Use pra "quem tá com vaga hoje às 14h tem vaga amanhã a partir das 15h?" (dia1=hoje, hora1=14:00, dia2=amanha, '
+    'hora2=15:00), "quem trabalha hoje e amanhã?" (sem horas). "a vaga das 14h" = a que começa às 14:00; "quem está na vaga às 14h", '
+    '"rolando", "cobrindo" = cobrindo=sim. NUNCA cruze você mesmo duas respostas de "Vagas do dia": use esta.\n'
+)
+if '"Cruzar vagas"' not in _sm:
+    _ancora = "\nCOMO RESPONDER"
+    assert _sm.count(_ancora) == 1, "prompt do suporte mudou: ajuste a etapa 27"
+    _sm = _sm.replace(_ancora, _FERRAMENTA_CRUZAR.rstrip("\n") + "\n" + _ancora, 1)
+nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"] = _sm
+
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
 texto = json.dumps(f, ensure_ascii=False)
@@ -1746,7 +1798,8 @@ assert [d["node"] for d in conn["Interpreta resposta"]["main"][0]] == ["Resposta
 assert [[d["node"] for d in o] for o in conn["Handoff de outro numero?"]["main"]] == [["Registra handoff"], ["Fim"]]
 assert "Não consegui responder agora" not in nodes["Interpreta resposta"]["parameters"]["jsCode"]
 assert [[d["node"] for d in o] for o in conn["Suporte?"]["main"]] == [["Agente Nina (suporte)"], ["Entregador?"]]
-assert tools_de("Agente Nina (suporte)") == ["Buscar cadastro", "Buscar pedido", "Corridas do entregador", "Dia dos motoboys", "Estatísticas", "Motoboy no dia", "Vagas do dia"], tools_de("Agente Nina (suporte)")
+assert tools_de("Agente Nina (suporte)") == ["Buscar cadastro", "Buscar pedido", "Corridas do entregador", "Cruzar vagas", "Dia dos motoboys", "Estatísticas", "Motoboy no dia", "Vagas do dia"], tools_de("Agente Nina (suporte)")
+assert '"Cruzar vagas"' in nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]  # etapa 27
 # Nina no painel (etapa 24): o passe em toda chamada ao backend do modo suporte, e o prompt.
 for _t in tools_de("Agente Nina (suporte)") + ["Identificar"]:
     assert any(h["name"] == "x-nina-passe" for h in nodes[_t]["parameters"]["headerParameters"]["parameters"]), _t
