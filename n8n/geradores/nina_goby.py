@@ -1690,6 +1690,28 @@ conn["Teste com segredo?"] = {"main": [
 ]}
 nodes["Webhook (teste)"]["notes"] = "ponte (chat dos sites) e curl de teste: exige x-nina-segredo; devolve a resposta"
 
+# ── 26. Suporte: cópia CORTADA do texto pronto também vira o texto pronto (dono, 10/10/2026) ─
+# "Por que não finalizou?" — o "Dia dos motoboys" voltou inteiro do backend, mas a IA reescreveu
+# o texto (trocou "-" por "‑") e parou no meio ("Wes Gama — Holand‑ …"). A etapa 15 só trocava a
+# resposta pelo `texto` da ferramenta quando ela CONTINHA o texto inteiro. Agora também quando a
+# resposta traz o COMEÇO do texto (os primeiros 60 caracteres, com hífens, espaços e asteriscos
+# normalizados): é a IA copiando, e o que vai é o texto da ferramenta, completo. Resposta curta
+# tirada do texto ("chegou às 18:04") não traz esse começo: segue como a IA escreveu.
+_VELHO_PRONTO = "  const pronto = typeof raw === 'string' ? prontos.reverse().find((t) => umaLinha(raw).includes(umaLinha(t))) : null;\n"
+_NOVO_PRONTO = (
+    "  // Etapa 26: a IA copiando o texto e parando no meio também conta — vai o texto inteiro.\n"
+    "  const normal = (t) => umaLinha(String(t || '').replace(/[\u2010-\u2015\u2212]/g, '-').replace(/[\u00a0\u202f]/g, ' ').replace(/[*_`]/g, ''));\n"
+    "  const comeco = (t) => normal(t).slice(0, 60);\n"
+    "  const recentes = prontos.slice().reverse();\n"
+    "  const pronto = typeof raw === 'string'\n"
+    "    ? (recentes.find((t) => normal(raw).includes(normal(t))) || recentes.find((t) => comeco(t).length >= 20 && normal(raw).includes(comeco(t))) || null)\n"
+    "    : null;\n"
+)
+_code = nodes["Interpreta resposta"]["parameters"]["jsCode"]
+if "Etapa 26" not in _code:
+    assert _code.count(_VELHO_PRONTO) == 1, "Interpreta resposta mudou: ajuste a etapa 26"
+    nodes["Interpreta resposta"]["parameters"]["jsCode"] = _code.replace(_VELHO_PRONTO, _NOVO_PRONTO)
+
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
 texto = json.dumps(f, ensure_ascii=False)
@@ -1729,6 +1751,7 @@ assert tools_de("Agente Nina (suporte)") == ["Buscar cadastro", "Buscar pedido",
 for _t in tools_de("Agente Nina (suporte)") + ["Identificar"]:
     assert any(h["name"] == "x-nina-passe" for h in nodes[_t]["parameters"]["headerParameters"]["parameters"]), _t
 assert "semPermissao" in nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]
+assert "Etapa 26" in nodes["Interpreta resposta"]["parameters"]["jsCode"]  # cópia cortada vira o texto pronto
 assert "'painel_'" in json.dumps(nodes["Normaliza"]["parameters"], ensure_ascii=False)
 for p_ in (ENTREGADOR, LOJA, GERAL):
     assert "blocoInicio" in p_
