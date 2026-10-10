@@ -357,15 +357,32 @@ async function enviarPelaMeta(numero, texto) {
 // backend ─'nina' (com ack)─▶ ponte ─▶ n8n /webhook/goby-teste ─▶ resposta no ack.
 // Quem é a pessoa (telefone confirmado por código ou equipe logada) o backend já decidiu.
 
-async function perguntarANina(pergunta) {
-    const telefone = String(pergunta?.telefone || '').replace(/\D/g, '');
+// Nina no painel (goby-suporte, 09/10/2026): em vez de telefone vem `canal: 'painel'`, o
+// chatId `painel_<uid>` e o `passe` com as permissões de quem perguntou — o backend confere o
+// passe em cada consulta. Aqui só repassa, no formato que o fluxo espera.
+function corpoPraNina(pergunta) {
     const texto = String(pergunta?.texto || '').trim();
-    if (!/^\d{10,13}$/.test(telefone) || !texto) return { ok: false, erro: 'telefone e texto são obrigatórios' };
+    if (!texto) return null;
+    const nome = pergunta?.nome ? { nome: String(pergunta.nome).slice(0, 80) } : {};
+    if (pergunta?.canal === 'painel') {
+        const chatId = String(pergunta?.chatId || '');
+        const passe = String(pergunta?.passe || '');
+        if (!/^painel_[A-Za-z0-9_-]{1,64}$/.test(chatId) || !/^[a-f0-9]{48}$/.test(passe)) return null;
+        return { canal: 'painel', chatId, passe, message: texto.slice(0, 2000), ...nome };
+    }
+    const telefone = String(pergunta?.telefone || '').replace(/\D/g, '');
+    if (!/^\d{10,13}$/.test(telefone)) return null;
+    // nome: quem está logado no site (a Nina trata pelo nome).
+    return { chatId: telefone, message: texto.slice(0, 2000), ...nome };
+}
+
+async function perguntarANina(pergunta) {
+    const corpoEnviado = corpoPraNina(pergunta);
+    if (!corpoEnviado) return { ok: false, erro: 'telefone (ou chatId e passe do painel) e texto são obrigatórios' };
     const resp = await fetch(cfg.n8nNinaWeb, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // nome: quem está logado no Goby Suporte (a Nina trata pelo nome no modo suporte).
-        body: JSON.stringify({ chatId: telefone, message: texto.slice(0, 2000), ...(pergunta?.nome ? { nome: String(pergunta.nome).slice(0, 80) } : {}) }),
+        body: JSON.stringify(corpoEnviado),
         signal: AbortSignal.timeout(60000),
     });
     const corpo = await resp.json().catch(() => ({}));

@@ -1536,6 +1536,101 @@ if "quemFalaNoSuporte" not in _js:
         "const quemFalaNoSuporte = String($('Normaliza').first().json.nome || '').trim();\n"
         "let blocoQuem = ehSuporte ? 'QUEM É: o SUPORTE da Goby (equipe interna)' + (quemFalaNoSuporte ? ', quem está escrevendo é ' + quemFalaNoSuporte + ' (trate pelo nome, não pergunte quem é)' : '') + '.' : '';")
 
+# ── 24. Nina no painel com as permissões de quem pergunta (dono, 09/10/2026) ───────────────
+# "Posso perguntar tudo que o usuário autenticado tem acesso, com permissão na tela de usuários;
+# como padrão de suporte, sobre motoboys." Substitui o "fala como o número do suporte" da
+# etapa 23 no goby-suporte: o backend (POST /api/admin/nina/perguntar, ninaPainel.js) manda pela
+# ponte (evento `nina`) { canal: 'painel', chatId: 'painel_<uid>', texto, nome, passe } pra
+# entrada de teste, e a resposta volta na mesma chamada ("Resposta do teste").
+# O PASSE carrega as permissões de quem perguntou e vai em toda chamada ao backend
+# (`x-nina-passe`): o identificar responde "suporte" pelo passe, e cada consulta do modo suporte
+# é conferida lá (sem a permissão da tela, 403 com semPermissao). A IA não decide quem vê o quê.
+PASSE_DO_PAINEL = "={{ $('Normaliza').first().json.passe || '' }}"
+
+# Normaliza: canal 'painel' e o passe (o nome já vem da etapa 23). O chatId do painel é sempre
+# "painel_…" — o backend recusa "painel_…" sem passe, então ninguém usa este canal pra se
+# passar por um telefone.
+_na = {a["name"]: a for a in nodes["Normaliza"]["parameters"]["assignments"]["assignments"]}
+assert "'whatsapp'" in _na["canal"]["value"], _na["canal"]["value"]
+_na["canal"]["value"] = "={{ $json.body?.data ? 'whatsapp' : ($json.body?.canal === 'painel' ? 'painel' : 'teste') }}"
+assert "$json.body?.nome" in _na["nome"]["value"], "a etapa 23 (nome do corpo) tem que vir antes"
+if "passe" not in _na:
+    nodes["Normaliza"]["parameters"]["assignments"]["assignments"].append({
+        "id": "s9passe", "name": "passe", "type": "string",
+        "value": "={{ !$json.body?.data && $json.body?.canal === 'painel' ? String($json.body?.passe || '') : '' }}",
+    })
+_cid = _na["chatId"]
+if "painel_" not in _cid["value"]:
+    _velho = "return j ? j.split('@')[0] : $json.body?.chatId; })() }}"
+    assert _cid["value"].endswith(_velho), _cid["value"][-120:]
+    _cid["value"] = _cid["value"][: -len(_velho)] + (
+        "if (j) return j.split('@')[0]; "
+        "if ($json.body?.canal === 'painel') return 'painel_' + String($json.body?.chatId || '').replace(/^painel_/, '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64); "
+        "return $json.body?.chatId; })() }}"
+    )
+
+def _com_passe(no):
+    hs = no["parameters"].setdefault("headerParameters", {"parameters": []})["parameters"]
+    no["parameters"]["sendHeaders"] = True
+    if not any(h["name"] == "x-nina-passe" for h in hs):
+        hs.append({"name": "x-nina-passe", "value": PASSE_DO_PAINEL})
+
+_com_passe(nodes["Identificar"])
+
+# Ferramenta nova do modo suporte: as estatísticas da operação Goby.
+add_node({
+    "parameters": {
+        "toolDescription": (
+            "Estatisticas da operacao Goby num periodo: quantos pedidos, entregues, cancelados, em andamento, "
+            "o tempo tipico (pedido ate a entrega, rota, ate aceitar), a comparacao com o periodo anterior e as lojas que mais pediram. "
+            "Parametros: periodo (dia, semana ou mes), dia (hoje, ontem, anteontem, uma data DD/MM ou AAAA-MM-DD, ou passada/passado "
+            "pra semana/mes anterior) e loja (opcional: nome ou parte do nome). Sem valores em dinheiro."
+        ),
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/suporte/estatisticas",
+        "sendQuery": True,
+        "queryParameters": {"parameters": [
+            {"name": "telefone", "value": "={{ $('Normaliza').first().json.chatId }}"},
+            {"name": "periodo", "value": "={{ $fromAI('periodo', 'dia, semana ou mes; vazio = dia', 'string', 'dia') }}"},
+            {"name": "dia", "value": "={{ $fromAI('dia', 'hoje, ontem, anteontem, DD/MM, AAAA-MM-DD, ou passada/passado; vazio = hoje', 'string', '') }}"},
+            {"name": "loja", "value": "={{ $fromAI('loja', 'nome da loja; vazio = a operacao toda', 'string', '') }}"},
+            {"name": "formato", "value": "texto"},
+        ]},
+        "sendHeaders": True,
+        "headerParameters": {"parameters": [{"name": "x-suporte-api-key", "value": CHAVE_NINA}]},
+        "options": {"timeout": 30000},
+    },
+    "name": "Estatísticas",
+    "type": "n8n-nodes-base.httpRequestTool",
+    "typeVersion": 4.2,
+    "position": [-3488, -1900],
+    "id": novo_id(),
+})
+liga("Estatísticas", "Agente Nina (suporte)", tipo="ai_tool")
+
+for _s, _c in conn.items():
+    if any(d["node"] == "Agente Nina (suporte)" for out in _c.get("ai_tool", []) for d in out):
+        _com_passe(nodes[_s])
+
+_sm = nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]
+_FERRAMENTA_EST = (
+    '- "Estatísticas" (periodo: dia, semana ou mes; dia; loja opcional): como foi a operação — pedidos, entregues, cancelados, '
+    'tempo típico, comparação com o período anterior e as lojas que mais pediram. Use pra "como foi hoje", "e ontem?", '
+    '"como tá a semana", "semana passada" (periodo=semana, dia=passada), "o mês" (periodo=mes), "como foi a Holandesa ontem" (loja).\n'
+)
+if '"Estatísticas"' not in _sm:
+    _ancora = "\nCOMO RESPONDER"
+    assert _sm.count(_ancora) == 1, "prompt do suporte mudou: ajuste a etapa 23"
+    _sm = _sm.replace(_ancora, _FERRAMENTA_EST.rstrip("\n") + "\n" + _ancora, 1)
+_REGRA_PERMISSAO = (
+    '- Ferramenta voltou 403 com semPermissao (pergunta pelo painel): diga que quem perguntou não tem permissão pra essa '
+    'consulta e qual é, numa frase ("Você não tem acesso a pedidos (permissão Ver pedidos)."). Não tente outra ferramenta pra contornar.\n'
+)
+if "semPermissao" not in _sm:
+    _ancora = "- Ferramenta deu erro (success false"
+    assert _sm.count(_ancora) == 1, "prompt do suporte mudou: ajuste a etapa 23"
+    _sm = _sm.replace(_ancora, _REGRA_PERMISSAO + _ancora, 1)
+nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"] = _sm
+
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
 texto = json.dumps(f, ensure_ascii=False)
@@ -1570,7 +1665,12 @@ assert [d["node"] for d in conn["Interpreta resposta"]["main"][0]] == ["Resposta
 assert [[d["node"] for d in o] for o in conn["Handoff de outro numero?"]["main"]] == [["Registra handoff"], ["Fim"]]
 assert "Não consegui responder agora" not in nodes["Interpreta resposta"]["parameters"]["jsCode"]
 assert [[d["node"] for d in o] for o in conn["Suporte?"]["main"]] == [["Agente Nina (suporte)"], ["Entregador?"]]
-assert tools_de("Agente Nina (suporte)") == ["Buscar cadastro", "Buscar pedido", "Corridas do entregador", "Dia dos motoboys", "Motoboy no dia", "Vagas do dia"], tools_de("Agente Nina (suporte)")
+assert tools_de("Agente Nina (suporte)") == ["Buscar cadastro", "Buscar pedido", "Corridas do entregador", "Dia dos motoboys", "Estatísticas", "Motoboy no dia", "Vagas do dia"], tools_de("Agente Nina (suporte)")
+# Nina no painel (etapa 24): o passe em toda chamada ao backend do modo suporte, e o prompt.
+for _t in tools_de("Agente Nina (suporte)") + ["Identificar"]:
+    assert any(h["name"] == "x-nina-passe" for h in nodes[_t]["parameters"]["headerParameters"]["parameters"]), _t
+assert "semPermissao" in nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]
+assert "'painel_'" in json.dumps(nodes["Normaliza"]["parameters"], ensure_ascii=False)
 for p_ in (ENTREGADOR, LOJA, GERAL):
     assert "blocoInicio" in p_
 assert "blocoMenu" in GERAL and "$getWorkflowStaticData" in nodes["Monta contexto"]["parameters"]["jsCode"]

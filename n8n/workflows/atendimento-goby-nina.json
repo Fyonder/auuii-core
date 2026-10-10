@@ -122,7 +122,7 @@
               "id": "s0",
               "name": "chatId",
               "type": "string",
-              "value": "={{ (() => { const d = $json.body?.data || {}; const k = d.key || {}; const j = k.remoteJid || ''; if (j.endsWith('@lid')) { const alt = [k.remoteJidAlt, k.senderPn, d.senderPn].find(a => typeof a === 'string' && /\\d{10,}/.test(a)); if (alt) return alt.split('@')[0].replace(/\\D/g, ''); } return j ? j.split('@')[0] : $json.body?.chatId; })() }}"
+              "value": "={{ (() => { const d = $json.body?.data || {}; const k = d.key || {}; const j = k.remoteJid || ''; if (j.endsWith('@lid')) { const alt = [k.remoteJidAlt, k.senderPn, d.senderPn].find(a => typeof a === 'string' && /\\d{10,}/.test(a)); if (alt) return alt.split('@')[0].replace(/\\D/g, ''); } if (j) return j.split('@')[0]; if ($json.body?.canal === 'painel') return 'painel_' + String($json.body?.chatId || '').replace(/^painel_/, '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64); return $json.body?.chatId; })() }}"
             },
             {
               "id": "s1",
@@ -140,7 +140,7 @@
               "id": "s3",
               "name": "canal",
               "type": "string",
-              "value": "={{ $json.body?.data ? 'whatsapp' : 'teste' }}"
+              "value": "={{ $json.body?.data ? 'whatsapp' : ($json.body?.canal === 'painel' ? 'painel' : 'teste') }}"
             },
             {
               "id": "s4",
@@ -159,6 +159,12 @@
               "name": "msgId",
               "type": "string",
               "value": "={{ $json.body?.data?.key?.id ?? '' }}"
+            },
+            {
+              "id": "s9passe",
+              "name": "passe",
+              "type": "string",
+              "value": "={{ !$json.body?.data && $json.body?.canal === 'painel' ? String($json.body?.passe || '') : '' }}"
             }
           ]
         },
@@ -184,6 +190,10 @@
             {
               "name": "x-suporte-api-key",
               "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
+            },
+            {
+              "name": "x-nina-passe",
+              "value": "={{ $('Normaliza').first().json.passe || '' }}"
             }
           ]
         },
@@ -1968,7 +1978,7 @@
         "promptType": "define",
         "text": "={{ $('Monta contexto').first().json.mensagem }}",
         "options": {
-          "systemMessage": "=Você é a Nina, assistente da GOBY, falando com o SUPORTE da Goby (a equipe interna, pelo WhatsApp do suporte). Aqui você é a ferramenta de consulta da equipe: direta, sem cumprimentar de novo, sem oferecer atendente.\n\nFERRAMENTAS (todas devolvem `texto`: a resposta pronta)\n- \"Buscar cadastro\" (nome, parte do nome, código do entregador ou CNPJ): entregadores e lojas.\n- \"Motoboy no dia\" (código ou nome; dia): um entregador — vagas com horário e chegada, pedidos do dia, corridas em aberto. Use pra \"o Fulano tá com vaga hoje?\", \"que horas ele chegou?\", \"quantas ele fez ontem?\".\n- \"Corridas do entregador\" (código ou nome): as corridas em aberto dele com os endereços.\n- \"Buscar pedido\" (número): qualquer pedido, com entregador, etapa, endereços e horários.\n- \"Dia dos motoboys\" (dia; loja e situacao opcionais): todos os entregadores do dia — quem não veio, quem está atrasado, quem está na vaga, pedidos de cada um. Use pra \"como tá hoje\", \"quem não chegou\" (situacao=nao_chegou), \"quem tá atrasado\" (situacao=atrasado), \"quem tá com problema\" (situacao=nao_chegou,atrasado), \"quem transferiu a vaga\" (situacao=transferiu), \"quem tá na Holandesa\" (loja). Quem transferiu a vaga não faltou: a ficha diz \"Transferiu pra Fulano\".\n- \"Vagas do dia\" (dia; loja, periodo, livres, nomes opcionais): as vagas do dia, livres e ocupadas. \"sobrando\"/\"livre\": livres=sim. \"agora\"/\"as que faltam\": periodo=agora. manhã, almoço, tarde, noite: periodo. Quem está nas vagas: loja ou periodo (os nomes vêm junto) ou nomes=sim. Vaga livre é aqui; quem chegou, atrasou ou faltou é \"Dia dos motoboys\".\n\nCOMO RESPONDER\n- A resposta é o `texto` da ferramenta, EXATAMENTE como veio: mesmas linhas, mesmos *asteriscos*, mesmos emojis. Não resuma, não reescreva, não junte numa linha, não acrescente cumprimento nem comentário.\n- UM entregador (mandaram o nome ou o código, ou a busca achou um só): use \"Motoboy no dia\" (dia vazio = hoje) e mande o `texto` dele.\n- Pergunta de uma coisa só (\"que horas ele chegou?\", \"quantas ele fez?\"): responda numa frase curta tirada do `texto`.\n- Chamou mais de uma ferramenta: mande o `texto` da que responde a pergunta (a mais específica).\n- \"ele\", \"esse motoboy\", \"e a vaga dele?\": é o último entregador da conversa — use o nome ou o código dele, não pergunte de novo.\n- Pediram pra mudar algo (cadastro, bloquear, tirar pedido, pagar): por aqui é só consulta. Pra falar com o motoboy ou a loja, a equipe responde pelo painel (aba Atendimento).\n- Veio sem `texto`, mas com os dados (success true com linhas, totais, entregador, achados...): monte você uma resposta curta e organizada com esses dados, uma informação por linha.\n- Ferramenta deu erro (success false, 403, 503, sem resposta): NÃO diga que não achou. Diga \"A consulta não respondeu agora\" e o erro em poucas palavras.\n\nTRAVA DO FINANCEIRO\n- Nunca diga valor em dinheiro: nada de R$, taxa, ganho, acerto, fatura ou Pix.\n\nSAÍDA: o `texto` como veio (o *asterisco* é o negrito do WhatsApp; não use outro markdown, nem JSON). Nunca termine com [SUPORTE]: você já está falando com o suporte.",
+          "systemMessage": "=Você é a Nina, assistente da GOBY, falando com o SUPORTE da Goby (a equipe interna, pelo WhatsApp do suporte). Aqui você é a ferramenta de consulta da equipe: direta, sem cumprimentar de novo, sem oferecer atendente.\n\nFERRAMENTAS (todas devolvem `texto`: a resposta pronta)\n- \"Buscar cadastro\" (nome, parte do nome, código do entregador ou CNPJ): entregadores e lojas.\n- \"Motoboy no dia\" (código ou nome; dia): um entregador — vagas com horário e chegada, pedidos do dia, corridas em aberto. Use pra \"o Fulano tá com vaga hoje?\", \"que horas ele chegou?\", \"quantas ele fez ontem?\".\n- \"Corridas do entregador\" (código ou nome): as corridas em aberto dele com os endereços.\n- \"Buscar pedido\" (número): qualquer pedido, com entregador, etapa, endereços e horários.\n- \"Dia dos motoboys\" (dia; loja e situacao opcionais): todos os entregadores do dia — quem não veio, quem está atrasado, quem está na vaga, pedidos de cada um. Use pra \"como tá hoje\", \"quem não chegou\" (situacao=nao_chegou), \"quem tá atrasado\" (situacao=atrasado), \"quem tá com problema\" (situacao=nao_chegou,atrasado), \"quem transferiu a vaga\" (situacao=transferiu), \"quem tá na Holandesa\" (loja). Quem transferiu a vaga não faltou: a ficha diz \"Transferiu pra Fulano\".\n- \"Vagas do dia\" (dia; loja, periodo, livres, nomes opcionais): as vagas do dia, livres e ocupadas. \"sobrando\"/\"livre\": livres=sim. \"agora\"/\"as que faltam\": periodo=agora. manhã, almoço, tarde, noite: periodo. Quem está nas vagas: loja ou periodo (os nomes vêm junto) ou nomes=sim. Vaga livre é aqui; quem chegou, atrasou ou faltou é \"Dia dos motoboys\".\n- \"Estatísticas\" (periodo: dia, semana ou mes; dia; loja opcional): como foi a operação — pedidos, entregues, cancelados, tempo típico, comparação com o período anterior e as lojas que mais pediram. Use pra \"como foi hoje\", \"e ontem?\", \"como tá a semana\", \"semana passada\" (periodo=semana, dia=passada), \"o mês\" (periodo=mes), \"como foi a Holandesa ontem\" (loja).\n\nCOMO RESPONDER\n- A resposta é o `texto` da ferramenta, EXATAMENTE como veio: mesmas linhas, mesmos *asteriscos*, mesmos emojis. Não resuma, não reescreva, não junte numa linha, não acrescente cumprimento nem comentário.\n- UM entregador (mandaram o nome ou o código, ou a busca achou um só): use \"Motoboy no dia\" (dia vazio = hoje) e mande o `texto` dele.\n- Pergunta de uma coisa só (\"que horas ele chegou?\", \"quantas ele fez?\"): responda numa frase curta tirada do `texto`.\n- Chamou mais de uma ferramenta: mande o `texto` da que responde a pergunta (a mais específica).\n- \"ele\", \"esse motoboy\", \"e a vaga dele?\": é o último entregador da conversa — use o nome ou o código dele, não pergunte de novo.\n- Pediram pra mudar algo (cadastro, bloquear, tirar pedido, pagar): por aqui é só consulta. Pra falar com o motoboy ou a loja, a equipe responde pelo painel (aba Atendimento).\n- Veio sem `texto`, mas com os dados (success true com linhas, totais, entregador, achados...): monte você uma resposta curta e organizada com esses dados, uma informação por linha.\n- Ferramenta voltou 403 com semPermissao (pergunta pelo painel): diga que quem perguntou não tem permissão pra essa consulta e qual é, numa frase (\"Você não tem acesso a pedidos (permissão Ver pedidos).\"). Não tente outra ferramenta pra contornar.\n- Ferramenta deu erro (success false, 403, 503, sem resposta): NÃO diga que não achou. Diga \"A consulta não respondeu agora\" e o erro em poucas palavras.\n\nTRAVA DO FINANCEIRO\n- Nunca diga valor em dinheiro: nada de R$, taxa, ganho, acerto, fatura ou Pix.\n\nSAÍDA: o `texto` como veio (o *asterisco* é o negrito do WhatsApp; não use outro markdown, nem JSON). Nunca termine com [SUPORTE]: você já está falando com o suporte.",
           "maxIterations": 6,
           "returnIntermediateSteps": true
         },
@@ -2014,6 +2024,10 @@
             {
               "name": "x-suporte-api-key",
               "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
+            },
+            {
+              "name": "x-nina-passe",
+              "value": "={{ $('Normaliza').first().json.passe || '' }}"
             }
           ]
         },
@@ -2055,6 +2069,10 @@
             {
               "name": "x-suporte-api-key",
               "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
+            },
+            {
+              "name": "x-nina-passe",
+              "value": "={{ $('Normaliza').first().json.passe || '' }}"
             }
           ]
         },
@@ -2096,6 +2114,10 @@
             {
               "name": "x-suporte-api-key",
               "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
+            },
+            {
+              "name": "x-nina-passe",
+              "value": "={{ $('Normaliza').first().json.passe || '' }}"
             }
           ]
         },
@@ -2145,6 +2167,10 @@
             {
               "name": "x-suporte-api-key",
               "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
+            },
+            {
+              "name": "x-nina-passe",
+              "value": "={{ $('Normaliza').first().json.passe || '' }}"
             }
           ]
         },
@@ -2192,6 +2218,10 @@
             {
               "name": "x-suporte-api-key",
               "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
+            },
+            {
+              "name": "x-nina-passe",
+              "value": "={{ $('Normaliza').first().json.passe || '' }}"
             }
           ]
         },
@@ -2251,6 +2281,10 @@
             {
               "name": "x-suporte-api-key",
               "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
+            },
+            {
+              "name": "x-nina-passe",
+              "value": "={{ $('Normaliza').first().json.passe || '' }}"
             }
           ]
         },
@@ -2908,6 +2942,61 @@
         -216
       ],
       "id": "943aca5c-bf47-5388-b0d9-ba6940d6c7c3"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Estatisticas da operacao Goby num periodo: quantos pedidos, entregues, cancelados, em andamento, o tempo tipico (pedido ate a entrega, rota, ate aceitar), a comparacao com o periodo anterior e as lojas que mais pediram. Parametros: periodo (dia, semana ou mes), dia (hoje, ontem, anteontem, uma data DD/MM ou AAAA-MM-DD, ou passada/passado pra semana/mes anterior) e loja (opcional: nome ou parte do nome). Sem valores em dinheiro.",
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/suporte/estatisticas",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "telefone",
+              "value": "={{ $('Normaliza').first().json.chatId }}"
+            },
+            {
+              "name": "periodo",
+              "value": "={{ $fromAI('periodo', 'dia, semana ou mes; vazio = dia', 'string', 'dia') }}"
+            },
+            {
+              "name": "dia",
+              "value": "={{ $fromAI('dia', 'hoje, ontem, anteontem, DD/MM, AAAA-MM-DD, ou passada/passado; vazio = hoje', 'string', '') }}"
+            },
+            {
+              "name": "loja",
+              "value": "={{ $fromAI('loja', 'nome da loja; vazio = a operacao toda', 'string', '') }}"
+            },
+            {
+              "name": "formato",
+              "value": "texto"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-suporte-api-key",
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
+            },
+            {
+              "name": "x-nina-passe",
+              "value": "={{ $('Normaliza').first().json.passe || '' }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Estatísticas",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -3488,
+        -1900
+      ],
+      "id": "d084df9a-b8d1-4616-8bc8-c496b458247b"
     }
   ],
   "connections": {
@@ -3919,6 +4008,17 @@
         [
           {
             "node": "Agente Nina (entregador)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Estatísticas": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Nina (suporte)",
             "type": "ai_tool",
             "index": 0
           }

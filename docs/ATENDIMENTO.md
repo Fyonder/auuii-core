@@ -307,10 +307,15 @@ Conversar com a Nina por um chat no site, sem WhatsApp:
 site ─▶ backend ─'nina' (ack)─▶ ponte ─▶ n8n /webhook/goby-teste ─▶ resposta no ack
 ```
 
-- **Goby Suporte** (Atendimento → ⚙️ → Falar com a Nina): `POST /api/admin/whatsapp/nina-web`
-  `{texto}`, permissão `whatsapp.write`. Quem está logado fala **como o suporte** (modo suporte):
-  o backend manda o número do suporte (`SUPORTE_WHATSAPP` ou a equipe do robô) e o nome do staff,
-  que a Nina lê em `body.nome` (etapa 23 do gerador).
+- **Goby Suporte** (botão **Nina** ao lado de **Humano**, na lista de conversas):
+  `POST /api/admin/nina/perguntar {texto}`, permissão `nina.chat` (ligada no Suporte). Quem está
+  logado pergunta **com as permissões dele** (dono, 09/10): o backend cria um passe (3 min, uso
+  único) e manda pela ponte `{ canal: 'painel', chatId: 'painel_<uid>', texto, nome, passe }`. O
+  fluxo (etapa 24) põe o passe em toda chamada (`x-nina-passe`); o `identificar` responde
+  "suporte" pelo passe e cada consulta do modo suporte exige a permissão da tela (motoboys
+  `drivers.view`, pedido `orders.view`, estatística `stats.view`; telefone/CPF só com
+  `drivers.pii`). A Nina lê o nome em `body.nome` (etapa 23). A rota antiga
+  `/api/admin/whatsapp/nina-web` ("fala como o número do suporte") saiu.
 - **auuii-painel** (chat flutuante → aba Nina): quem fala é o **restaurante**, achado pelo email
   do login (`empresas.email` da Goby; dono, 09/10). `GET /api/nina-web/loja` e
   `POST /api/nina-web/mensagem {texto}`. Exige login Firebase sempre e **email confirmado**
