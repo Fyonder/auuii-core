@@ -364,7 +364,8 @@ async function perguntarANina(pergunta) {
     const resp = await fetch(cfg.n8nNinaWeb, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId: telefone, message: texto.slice(0, 2000) }),
+        // nome: quem está logado no Goby Suporte (a Nina trata pelo nome no modo suporte).
+        body: JSON.stringify({ chatId: telefone, message: texto.slice(0, 2000), ...(pergunta?.nome ? { nome: String(pergunta.nome).slice(0, 80) } : {}) }),
         signal: AbortSignal.timeout(60000),
     });
     const corpo = await resp.json().catch(() => ({}));
