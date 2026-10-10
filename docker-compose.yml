@@ -71,6 +71,9 @@ services:
       ROBO_GOBY_KEY: ${ROBO_GOBY_KEY:-}
       # Nina: segundos que cada mensagem espera pra juntar as seguidas (fluxo: "Espera mais mensagens")
       NINA_ESPERA_JUNTAR: ${NINA_ESPERA_JUNTAR:-8}
+      # Segredo da entrada de teste da Nina (/webhook/goby-teste, header x-nina-segredo). Mesmo
+      # valor na ponte. Vazio = a entrada recusa tudo (o chat da Nina nos sites para).
+      NINA_TESTE_SEGREDO: ${NINA_TESTE_SEGREDO:-}
       # Avisos do robô (fila com proteção do WhatsApp, 08/10): por rodada de 1 min, por hora, e a
       # janela em que um 2º código pro mesmo número não sai
       AVISOS_POR_MINUTO: ${AVISOS_POR_MINUTO:-2}
@@ -193,6 +196,8 @@ services:
       EVOLUTION_DA_META: ${EVOLUTION_DA_META-auuii}
       META_WHATSAPP_TOKEN: ${META_WHATSAPP_TOKEN:-}
       META_PHONE_NUMBER_ID: ${META_PHONE_NUMBER_ID:-}
+      # Chat da Nina nos sites: vai no header x-nina-segredo pro /webhook/goby-teste
+      NINA_TESTE_SEGREDO: ${NINA_TESTE_SEGREDO:-}
       TZ: ${TZ:-America/Sao_Paulo}
     volumes:
       - ponte_dados:/data

@@ -307,10 +307,15 @@ Conversar com a Nina por um chat no site, sem WhatsApp:
 site ─▶ backend ─'nina' (ack)─▶ ponte ─▶ n8n /webhook/goby-teste ─▶ resposta no ack
 ```
 
-- **Goby Suporte** (Atendimento → ⚙️ → Falar com a Nina): `POST /api/admin/whatsapp/nina-web`
-  `{texto}`, permissão `whatsapp.write`. Quem está logado fala **como o suporte** (modo suporte):
-  o backend manda o número do suporte (`SUPORTE_WHATSAPP` ou a equipe do robô) e o nome do staff,
-  que a Nina lê em `body.nome` (etapa 23 do gerador).
+- **Goby Suporte** (botão **Nina** ao lado de **Humano**, na lista de conversas):
+  `POST /api/admin/nina/perguntar {texto}`, permissão `nina.chat` (ligada no Suporte). Quem está
+  logado pergunta **com as permissões dele** (dono, 09/10): o backend cria um passe (3 min, uso
+  único) e manda pela ponte `{ canal: 'painel', chatId: 'painel_<uid>', texto, nome, passe }`. O
+  fluxo (etapa 24) põe o passe em toda chamada (`x-nina-passe`); o `identificar` responde
+  "suporte" pelo passe e cada consulta do modo suporte exige a permissão da tela (motoboys
+  `drivers.view`, pedido `orders.view`, estatística `stats.view`; telefone/CPF só com
+  `drivers.pii`). A Nina lê o nome em `body.nome` (etapa 23). A rota antiga
+  `/api/admin/whatsapp/nina-web` ("fala como o número do suporte") saiu.
 - **auuii-painel** (chat flutuante → aba Nina): quem fala é o **restaurante**, achado pelo email
   do login (`empresas.email` da Goby; dono, 09/10). `GET /api/nina-web/loja` e
   `POST /api/nina-web/mensagem {texto}`. Exige login Firebase sempre e **email confirmado**
@@ -320,6 +325,12 @@ site ─▶ backend ─'nina' (ack)─▶ ponte ─▶ n8n /webhook/goby-teste �
 - O fluxo usa a entrada de teste (`Webhook (teste)`), que responde na própria chamada. Ela não junta mensagens seguidas e a conversa não vai pro painel.
 - Ponte: `socket.on('nina')` em `ponte/src/index.js`; endereço em `N8N_WEBHOOK_NINA_WEB`
   (padrão `http://n8n:5678/webhook/goby-teste`).
+- **Segredo da entrada de teste** (etapa 25 do gerador, 09/10/2026): o `/webhook/goby-teste` só
+  segue com o header `x-nina-segredo` igual a `NINA_TESTE_SEGREDO` (nó *Teste com segredo?*).
+  Sem ele volta `{ ignorado: true }` e nada chama o backend. Antes, qualquer um com a URL mandava
+  `{chatId: <número do suporte>}` e lia o modo suporte na resposta. A mesma variável vai pro
+  n8n e pra ponte (compose); sem ela, ou diferente, o chat da Nina nos sites para (a ponte loga
+  e o site mostra o erro).
 
 ## Ligar
 
@@ -330,6 +341,7 @@ COMPOSE_PROFILES=ponte
 PONTE_ATIVA=true
 PONTE_API_KEY=<o mesmo valor configurado no Render, serviço do backend>
 PONTE_WEBHOOK_SECRET=<openssl rand -hex 16 — fica só aqui>
+NINA_TESTE_SEGREDO=<openssl rand -hex 24 — fica só aqui; o chat da Nina nos sites precisa>
 ```
 
 Depois:

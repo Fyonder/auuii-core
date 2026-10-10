@@ -1536,6 +1536,160 @@ if "quemFalaNoSuporte" not in _js:
         "const quemFalaNoSuporte = String($('Normaliza').first().json.nome || '').trim();\n"
         "let blocoQuem = ehSuporte ? 'QUEM É: o SUPORTE da Goby (equipe interna)' + (quemFalaNoSuporte ? ', quem está escrevendo é ' + quemFalaNoSuporte + ' (trate pelo nome, não pergunte quem é)' : '') + '.' : '';")
 
+# ── 24. Nina no painel com as permissões de quem pergunta (dono, 09/10/2026) ───────────────
+# "Posso perguntar tudo que o usuário autenticado tem acesso, com permissão na tela de usuários;
+# como padrão de suporte, sobre motoboys." Substitui o "fala como o número do suporte" da
+# etapa 23 no goby-suporte: o backend (POST /api/admin/nina/perguntar, ninaPainel.js) manda pela
+# ponte (evento `nina`) { canal: 'painel', chatId: 'painel_<uid>', texto, nome, passe } pra
+# entrada de teste, e a resposta volta na mesma chamada ("Resposta do teste").
+# O PASSE carrega as permissões de quem perguntou e vai em toda chamada ao backend
+# (`x-nina-passe`): o identificar responde "suporte" pelo passe, e cada consulta do modo suporte
+# é conferida lá (sem a permissão da tela, 403 com semPermissao). A IA não decide quem vê o quê.
+PASSE_DO_PAINEL = "={{ $('Normaliza').first().json.passe || '' }}"
+
+# Normaliza: canal 'painel' e o passe (o nome já vem da etapa 23). O chatId do painel é sempre
+# "painel_…" — o backend recusa "painel_…" sem passe, então ninguém usa este canal pra se
+# passar por um telefone.
+_na = {a["name"]: a for a in nodes["Normaliza"]["parameters"]["assignments"]["assignments"]}
+assert "'whatsapp'" in _na["canal"]["value"], _na["canal"]["value"]
+_na["canal"]["value"] = "={{ $json.body?.data ? 'whatsapp' : ($json.body?.canal === 'painel' ? 'painel' : 'teste') }}"
+assert "$json.body?.nome" in _na["nome"]["value"], "a etapa 23 (nome do corpo) tem que vir antes"
+if "passe" not in _na:
+    nodes["Normaliza"]["parameters"]["assignments"]["assignments"].append({
+        "id": "s9passe", "name": "passe", "type": "string",
+        "value": "={{ !$json.body?.data && $json.body?.canal === 'painel' ? String($json.body?.passe || '') : '' }}",
+    })
+_cid = _na["chatId"]
+if "painel_" not in _cid["value"]:
+    _velho = "return j ? j.split('@')[0] : $json.body?.chatId; })() }}"
+    assert _cid["value"].endswith(_velho), _cid["value"][-120:]
+    _cid["value"] = _cid["value"][: -len(_velho)] + (
+        "if (j) return j.split('@')[0]; "
+        "if ($json.body?.canal === 'painel') return 'painel_' + String($json.body?.chatId || '').replace(/^painel_/, '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64); "
+        "return $json.body?.chatId; })() }}"
+    )
+
+def _com_passe(no):
+    hs = no["parameters"].setdefault("headerParameters", {"parameters": []})["parameters"]
+    no["parameters"]["sendHeaders"] = True
+    if not any(h["name"] == "x-nina-passe" for h in hs):
+        hs.append({"name": "x-nina-passe", "value": PASSE_DO_PAINEL})
+
+_com_passe(nodes["Identificar"])
+
+# Ferramenta nova do modo suporte: as estatísticas da operação Goby.
+add_node({
+    "parameters": {
+        "toolDescription": (
+            "Estatisticas da operacao Goby num periodo: quantos pedidos, entregues, cancelados, em andamento, "
+            "o tempo tipico (pedido ate a entrega, rota, ate aceitar), a comparacao com o periodo anterior e as lojas que mais pediram. "
+            "Parametros: periodo (dia, semana ou mes), dia (hoje, ontem, anteontem, uma data DD/MM ou AAAA-MM-DD, ou passada/passado "
+            "pra semana/mes anterior) e loja (opcional: nome ou parte do nome). Sem valores em dinheiro."
+        ),
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/suporte/estatisticas",
+        "sendQuery": True,
+        "queryParameters": {"parameters": [
+            {"name": "telefone", "value": "={{ $('Normaliza').first().json.chatId }}"},
+            {"name": "periodo", "value": "={{ $fromAI('periodo', 'dia, semana ou mes; vazio = dia', 'string', 'dia') }}"},
+            {"name": "dia", "value": "={{ $fromAI('dia', 'hoje, ontem, anteontem, DD/MM, AAAA-MM-DD, ou passada/passado; vazio = hoje', 'string', '') }}"},
+            {"name": "loja", "value": "={{ $fromAI('loja', 'nome da loja; vazio = a operacao toda', 'string', '') }}"},
+            {"name": "formato", "value": "texto"},
+        ]},
+        "sendHeaders": True,
+        "headerParameters": {"parameters": [{"name": "x-suporte-api-key", "value": CHAVE_NINA}]},
+        "options": {"timeout": 30000},
+    },
+    "name": "Estatísticas",
+    "type": "n8n-nodes-base.httpRequestTool",
+    "typeVersion": 4.2,
+    "position": [-3488, -1900],
+    "id": novo_id(),
+})
+liga("Estatísticas", "Agente Nina (suporte)", tipo="ai_tool")
+
+for _s, _c in conn.items():
+    if any(d["node"] == "Agente Nina (suporte)" for out in _c.get("ai_tool", []) for d in out):
+        _com_passe(nodes[_s])
+
+_sm = nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]
+_FERRAMENTA_EST = (
+    '- "Estatísticas" (periodo: dia, semana ou mes; dia; loja opcional): como foi a operação — pedidos, entregues, cancelados, '
+    'tempo típico, comparação com o período anterior e as lojas que mais pediram. Use pra "como foi hoje", "e ontem?", '
+    '"como tá a semana", "semana passada" (periodo=semana, dia=passada), "o mês" (periodo=mes), "como foi a Holandesa ontem" (loja).\n'
+)
+if '"Estatísticas"' not in _sm:
+    _ancora = "\nCOMO RESPONDER"
+    assert _sm.count(_ancora) == 1, "prompt do suporte mudou: ajuste a etapa 23"
+    _sm = _sm.replace(_ancora, _FERRAMENTA_EST.rstrip("\n") + "\n" + _ancora, 1)
+_REGRA_PERMISSAO = (
+    '- Ferramenta voltou 403 com semPermissao (pergunta pelo painel): diga que quem perguntou não tem permissão pra essa '
+    'consulta e qual é, numa frase ("Você não tem acesso a pedidos (permissão Ver pedidos)."). Não tente outra ferramenta pra contornar.\n'
+)
+if "semPermissao" not in _sm:
+    _ancora = "- Ferramenta deu erro (success false"
+    assert _sm.count(_ancora) == 1, "prompt do suporte mudou: ajuste a etapa 23"
+    _sm = _sm.replace(_ancora, _REGRA_PERMISSAO + _ancora, 1)
+nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"] = _sm
+
+# ── 25. Entrada de teste só com o segredo (09/10/2026) ──────────────────────────────────
+# O /webhook/goby-teste não tinha autenticação e o Normaliza usa o `chatId` do corpo como
+# telefone: quem soubesse a URL mandava { chatId: <número do suporte>, message: "dia dos
+# motoboys" } e recebia na resposta HTTP o modo suporte (nomes, telefones, corridas, vagas).
+# Agora a entrada só segue com o header `x-nina-segredo` igual a NINA_TESTE_SEGREDO (no .env do
+# Kali, pro n8n e pra ponte). Sem a variável (ou curta), recusa tudo. Recusado volta
+# { ignorado: true } sem passar por nenhum nó que chama o backend.
+# Quem usa a entrada: a ponte (chat da Nina nos sites e a Nina do painel, `canal: 'painel'`) e o
+# curl de "Como mudar e publicar a Nina" no Obsidian. O Webhook da Evolution (/goby) não muda.
+SEGREDO_CONFERE = (
+    "={{ (() => { const s = String($env.NINA_TESTE_SEGREDO || ''); "
+    "const h = String(($json.headers || {})['x-nina-segredo'] || ''); "
+    "return s.length >= 16 && h === s; })() }}"
+)
+wx, wy = nodes["Webhook (teste)"]["position"]
+add_node({
+    "parameters": {
+        "conditions": {
+            "options": {"caseSensitive": True, "leftValue": "", "typeValidation": "loose", "version": 2},
+            "conditions": [{
+                "id": "segredo-teste", "leftValue": SEGREDO_CONFERE, "rightValue": "",
+                "operator": {"type": "boolean", "operation": "true", "singleValue": True},
+            }],
+            "combinator": "and",
+        },
+        "looseTypeValidation": True,
+        "options": {},
+    },
+    "name": "Teste com segredo?",
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2.2,
+    "position": [wx, wy + 200],
+    "notesInFlow": True,
+    "notes": "x-nina-segredo = NINA_TESTE_SEGREDO (ponte e curl de teste)",
+    "id": novo_id(),
+})
+add_node({
+    "parameters": {
+        "assignments": {"assignments": [
+            {"id": "tr1", "name": "ignorado", "type": "boolean", "value": "={{ true }}"},
+            {"id": "tr2", "name": "motivo", "type": "string", "value": "entrada de teste sem o segredo (x-nina-segredo)"},
+        ]},
+        "options": {},
+    },
+    "name": "Teste recusado",
+    "type": "n8n-nodes-base.set",
+    "typeVersion": 3.4,
+    "position": [wx + 208, wy + 300],
+    "notesInFlow": True,
+    "notes": "devolve só { ignorado, motivo } no HTTP",
+    "id": novo_id(),
+})
+conn["Webhook (teste)"] = {"main": [[{"node": "Teste com segredo?", "type": "main", "index": 0}]]}
+conn["Teste com segredo?"] = {"main": [
+    [{"node": "Humano pelo aparelho?", "type": "main", "index": 0}],
+    [{"node": "Teste recusado", "type": "main", "index": 0}],
+]}
+nodes["Webhook (teste)"]["notes"] = "ponte (chat dos sites) e curl de teste: exige x-nina-segredo; devolve a resposta"
+
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
 texto = json.dumps(f, ensure_ascii=False)
@@ -1570,7 +1724,12 @@ assert [d["node"] for d in conn["Interpreta resposta"]["main"][0]] == ["Resposta
 assert [[d["node"] for d in o] for o in conn["Handoff de outro numero?"]["main"]] == [["Registra handoff"], ["Fim"]]
 assert "Não consegui responder agora" not in nodes["Interpreta resposta"]["parameters"]["jsCode"]
 assert [[d["node"] for d in o] for o in conn["Suporte?"]["main"]] == [["Agente Nina (suporte)"], ["Entregador?"]]
-assert tools_de("Agente Nina (suporte)") == ["Buscar cadastro", "Buscar pedido", "Corridas do entregador", "Dia dos motoboys", "Motoboy no dia", "Vagas do dia"], tools_de("Agente Nina (suporte)")
+assert tools_de("Agente Nina (suporte)") == ["Buscar cadastro", "Buscar pedido", "Corridas do entregador", "Dia dos motoboys", "Estatísticas", "Motoboy no dia", "Vagas do dia"], tools_de("Agente Nina (suporte)")
+# Nina no painel (etapa 24): o passe em toda chamada ao backend do modo suporte, e o prompt.
+for _t in tools_de("Agente Nina (suporte)") + ["Identificar"]:
+    assert any(h["name"] == "x-nina-passe" for h in nodes[_t]["parameters"]["headerParameters"]["parameters"]), _t
+assert "semPermissao" in nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]
+assert "'painel_'" in json.dumps(nodes["Normaliza"]["parameters"], ensure_ascii=False)
 for p_ in (ENTREGADOR, LOJA, GERAL):
     assert "blocoInicio" in p_
 assert "blocoMenu" in GERAL and "$getWorkflowStaticData" in nodes["Monta contexto"]["parameters"]["jsCode"]
@@ -1605,6 +1764,13 @@ for _n in ("Entregador?", "Restaurante?"):
 assert "$('Identificar').first().json.perfil" not in json.dumps([nodes[x] for x in ("Entregador?", "Restaurante?", "Saudação", "Pede texto", "Prepara envio")], ensure_ascii=False)
 assert [d["node"] for d in conn["Monta contexto"]["main"][0]] == ["IA pausada?"]
 assert f["id"] == "goby4nVKd88YaJIL"
+# Entrada de teste (etapa 25): só passa com o segredo; nada além do portão sai do webhook.
+assert [[d["node"] for d in o] for o in conn["Webhook (teste)"]["main"]] == [["Teste com segredo?"]]
+assert [[d["node"] for d in o] for o in conn["Teste com segredo?"]["main"]] == [["Humano pelo aparelho?"], ["Teste recusado"]]
+assert "Teste recusado" not in conn
+assert "NINA_TESTE_SEGREDO" in SEGREDO_CONFERE and "s.length >= 16" in SEGREDO_CONFERE
+assert nodes["Webhook (teste)"]["parameters"]["path"] == "goby-teste"
+assert [[d["node"] for d in o] for o in conn["Webhook"]["main"]] == [["Humano pelo aparelho?"]]
 for tool in ("Me identificar", "Retirar pedido", "Identificar restaurante"):
     assert "$fromAI" in nodes[tool]["parameters"]["jsonBody"]
 for tool in ("Pedidos da loja", "Pedido da loja", "Semana da loja"):
