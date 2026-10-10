@@ -49,6 +49,9 @@ const cfg = {
     // Chat da Nina nos sites (goby-suporte, auuii-painel): a entrada de teste do fluxo responde
     // na própria chamada, sem passar pelo WhatsApp.
     n8nNinaWeb: process.env.N8N_WEBHOOK_NINA_WEB || 'http://n8n:5678/webhook/goby-teste',
+    // A entrada de teste só responde com este segredo (header x-nina-segredo, etapa 25 do
+    // gerador). Mesmo valor no n8n. Vazio = o chat da Nina nos sites fica desligado.
+    ninaTesteSegredo: process.env.NINA_TESTE_SEGREDO || '',
 };
 
 function log(...partes) {
@@ -65,6 +68,9 @@ if (faltando.length) {
 if (cfg.segredo.length < 16) {
     log('❌ PONTE_WEBHOOK_SECRET curto demais (mínimo 16 caracteres).');
     process.exit(1);
+}
+if (cfg.ninaTesteSegredo.length < 16) {
+    log('⚠️  NINA_TESTE_SEGREDO vazio ou curto (mínimo 16): o chat da Nina nos sites fica desligado.');
 }
 
 const classificador = new Classificador({ suporteWhatsapp: cfg.suporte });
@@ -379,14 +385,17 @@ function corpoPraNina(pergunta) {
 async function perguntarANina(pergunta) {
     const corpoEnviado = corpoPraNina(pergunta);
     if (!corpoEnviado) return { ok: false, erro: 'telefone (ou chatId e passe do painel) e texto são obrigatórios' };
+    if (cfg.ninaTesteSegredo.length < 16) return { ok: false, erro: 'NINA_TESTE_SEGREDO não configurado na ponte' };
     const resp = await fetch(cfg.n8nNinaWeb, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-nina-segredo': cfg.ninaTesteSegredo },
         body: JSON.stringify(corpoEnviado),
         signal: AbortSignal.timeout(60000),
     });
     const corpo = await resp.json().catch(() => ({}));
     if (!resp.ok) return { ok: false, erro: `n8n respondeu ${resp.status}` };
+    // Segredo diferente do n8n: o fluxo devolve { ignorado: true } em vez da resposta.
+    if (corpo.ignorado === true) return { ok: false, erro: 'o n8n recusou: NINA_TESTE_SEGREDO diferente do da ponte' };
     return { ok: true, resposta: String(corpo.reply || ''), handoff: corpo.handoff === true };
 }
 

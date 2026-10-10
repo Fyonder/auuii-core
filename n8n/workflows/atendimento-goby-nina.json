@@ -947,7 +947,7 @@
       "webhookId": "8576e0a2-5cf7-46a0-a05b-0bd85913271c",
       "notesInFlow": true,
       "id": "2fbc7940-8534-4efb-8fb9-c3408bc2a1e4",
-      "notes": "teste por HTTP (testar.sh): espera o fluxo terminar e devolve a resposta"
+      "notes": "ponte (chat dos sites) e curl de teste: exige x-nina-segredo; devolve a resposta"
     },
     {
       "parameters": {
@@ -2996,7 +2996,75 @@
         -3488,
         -1900
       ],
-      "id": "d084df9a-b8d1-4616-8bc8-c496b458247b"
+      "id": "d890c5f4-43c5-42a1-ab4d-9ca6745193ef"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "segredo-teste",
+              "leftValue": "={{ (() => { const s = String($env.NINA_TESTE_SEGREDO || ''); const h = String(($json.headers || {})['x-nina-segredo'] || ''); return s.length >= 16 && h === s; })() }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "Teste com segredo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -5872,
+        -44
+      ],
+      "notesInFlow": true,
+      "notes": "x-nina-segredo = NINA_TESTE_SEGREDO (ponte e curl de teste)",
+      "id": "352d7799-2080-4593-b135-29c895b3d088"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "tr1",
+              "name": "ignorado",
+              "type": "boolean",
+              "value": "={{ true }}"
+            },
+            {
+              "id": "tr2",
+              "name": "motivo",
+              "type": "string",
+              "value": "entrada de teste sem o segredo (x-nina-segredo)"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Teste recusado",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -5664,
+        56
+      ],
+      "notesInFlow": true,
+      "notes": "devolve só { ignorado, motivo } no HTTP",
+      "id": "33b27551-ef06-48f0-93d3-bbd61a1d747f"
     }
   ],
   "connections": {
@@ -3281,7 +3349,7 @@
       "main": [
         [
           {
-            "node": "Humano pelo aparelho?",
+            "node": "Teste com segredo?",
             "type": "main",
             "index": 0
           }
@@ -4009,6 +4077,24 @@
           {
             "node": "Agente Nina (entregador)",
             "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Teste com segredo?": {
+      "main": [
+        [
+          {
+            "node": "Humano pelo aparelho?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Teste recusado",
+            "type": "main",
             "index": 0
           }
         ]
