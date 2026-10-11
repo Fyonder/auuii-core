@@ -1,0 +1,56 @@
+name: CI
+
+# Toda PR e todo push na main. É o "verde" que o dono olha antes de mergear (10/10/2026:
+# "toda vez que eu for mergear tem que ver se esses testes passaram").
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  nina:
+    name: Fluxo da Nina
+    # Fixo de propósito: `ubuntu-latest` muda de sistema sem ninguém pedir.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      # O gerador é a fonte da verdade do fluxo: ele roda os próprios asserts de
+      # integridade e tem que produzir EXATAMENTE o JSON que está no repositório. Diferença
+      # = alguém editou o JSON à mão, ou esqueceu de rodar o gerador depois de mudar.
+      - name: Gerador da Nina (asserts + JSON em dia)
+        run: |
+          python n8n/geradores/nina_goby.py
+          git diff --exit-code -- n8n/workflows/atendimento-goby-nina.json
+
+      - name: Testes do fluxo gerado
+        run: node --test n8n/test/*.test.js
+
+  ponte:
+    name: Ponte
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ponte
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      # A ponte não tem lockfile nem build: só socket.io-client.
+      - name: Instalar dependências
+        run: npm install --no-audit --no-fund
+
+      - name: Testes
+        run: npm test
