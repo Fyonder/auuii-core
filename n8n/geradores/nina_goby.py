@@ -1809,6 +1809,28 @@ if '"Vagas de vários"' not in _sm:
     _sm = _sm.replace(_ancora, _FERRAMENTA_VARIOS.rstrip("\n") + "\n" + _ancora, 1)
 nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"] = _sm
 
+# ── 29. Suporte: um nome só não vai pra "Vagas de vários" (dono, 12/10/2026) ─────────────
+# Visto em 12/10: "fulano da silva tem vaga hoje" e "Beltrano tem vaga hoje", uma pergunta por
+# mensagem, foram pra "Vagas de vários" (o "ou as mensagens juntas" da etapa 28 fez a IA somar a
+# conversa) e voltaram "1 com vaga, 0 sem". Um nome na mensagem = "Motoboy no dia", a ficha.
+_VARIOS_VELHO = 'Use sempre que a pergunta (ou as mensagens juntas) citar mais de um nome:'
+_VARIOS_NOVO = (
+    'Use só quando a MENSAGEM ATUAL citar dois ou mais nomes:'
+)
+_UM_SO = (
+    ' Um nome só na mensagem (mesmo que antes tenham perguntado de outros): "Motoboy no dia", nunca esta.'
+)
+_FIM_VARIOS = 'não chame "Motoboy no dia" um por um.'
+_sm = nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]
+if _VARIOS_VELHO in _sm:
+    assert _sm.count(_FIM_VARIOS) == 1, "prompt do suporte mudou: ajuste a etapa 29"
+    _sm = _sm.replace(_VARIOS_VELHO, _VARIOS_NOVO, 1).replace(_FIM_VARIOS, _FIM_VARIOS + _UM_SO, 1)
+nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"] = _sm
+_desc = nodes["Vagas de vários"]["parameters"]["toolDescription"]
+if "NUNCA pra um nome so" not in _desc:
+    nodes["Vagas de vários"]["parameters"]["toolDescription"] = _desc.replace(
+        "So pro suporte.", "NUNCA pra um nome so (use Motoboy no dia). So pro suporte.", 1)
+
 # ── Integridade ──────────────────────────────────────────────────────────────────────
 nomes = {n["name"] for n in f["nodes"]}
 texto = json.dumps(f, ensure_ascii=False)
@@ -1846,6 +1868,8 @@ assert [[d["node"] for d in o] for o in conn["Suporte?"]["main"]] == [["Agente N
 assert tools_de("Agente Nina (suporte)") == ["Buscar cadastro", "Buscar pedido", "Corridas do entregador", "Cruzar vagas", "Dia dos motoboys", "Estatísticas", "Motoboy no dia", "Vagas de vários", "Vagas do dia"], tools_de("Agente Nina (suporte)")
 assert '"Cruzar vagas"' in nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]  # etapa 27
 assert '"Vagas de vários"' in nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]  # etapa 28
+assert "Um nome só na mensagem" in nodes["Agente Nina (suporte)"]["parameters"]["options"]["systemMessage"]  # etapa 29
+assert "NUNCA pra um nome so" in nodes["Vagas de vários"]["parameters"]["toolDescription"]  # etapa 29
 # Nina no painel (etapa 24): o passe em toda chamada ao backend do modo suporte, e o prompt.
 for _t in tools_de("Agente Nina (suporte)") + ["Identificar"]:
     assert any(h["name"] == "x-nina-passe" for h in nodes[_t]["parameters"]["headerParameters"]["parameters"]), _t
