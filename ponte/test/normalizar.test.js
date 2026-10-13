@@ -1,7 +1,7 @@
 // node --test test/
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { Classificador, chaveCanonica, destinoDaMensagem, emMs } = require('../src/normalizar');
+const { Classificador, chaveCanonica, destinoDaMensagem, participanteDoGrupo, emMs } = require('../src/normalizar');
 
 const SUPORTE = '557991367323';
 
@@ -58,12 +58,39 @@ test('digitado no celular do Auuii é do aparelho; eco de envio da API é ignora
     assert.equal(c.classificar(upsert(msg({ id: 'API1', fromMe: true, texto: 'resposta' }))), null);
 });
 
-test('grupo, status e reação não viram mensagem', () => {
+test('status e reação não viram mensagem', () => {
     const c = new Classificador();
-    assert.equal(c.classificar(upsert(msg({ jid: '120363@g.us' }))), null);
     assert.equal(c.classificar(upsert(msg({ jid: 'status@broadcast' }))), null);
+    assert.equal(c.classificar(upsert(msg({ jid: '123@newsletter' }))), null);
     assert.equal(c.classificar(upsert({ key: { remoteJid: '554499429771@s.whatsapp.net', id: 'R1' }, message: { reactionMessage: { text: '👍' } }, messageType: 'reactionMessage' })), null);
     assert.equal(c.classificar({ event: 'connection.update', data: {} }), null);
+});
+
+// Dono (13/10/2026): "preciso de mensagens dos grupos" — os grupos de suporte dos restaurantes.
+test('mensagem em grupo é do contato, com o grupo como conversa e quem escreveu em participante', () => {
+    const c = new Classificador();
+    const ev = c.classificar(upsert(msg({ jid: '120363000000000001@g.us', key: { participant: '554499429771@s.whatsapp.net' } })));
+    assert.equal(ev.autor, 'contato');
+    assert.equal(ev.jid, '120363000000000001@g.us');
+    assert.equal(ev.telefone, null);
+    assert.deepEqual(ev.grupo, { jid: '120363000000000001@g.us' });
+    assert.deepEqual(ev.participante, { jid: '554499429771@s.whatsapp.net', telefone: '554499429771', nome: 'Maria' });
+});
+
+test('participante por LID: o telefone vem do participantAlt, ou fica vazio', () => {
+    const comAlt = participanteDoGrupo({ key: { participant: '111@lid', participantAlt: '554499429771@s.whatsapp.net' }, pushName: 'Zé' });
+    assert.deepEqual(comAlt, { jid: '111@lid', telefone: '554499429771', nome: 'Zé' });
+    const semAlt = participanteDoGrupo({ key: { participant: '111@lid' }, pushName: 'Zé' });
+    assert.deepEqual(semAlt, { jid: '111@lid', telefone: null, nome: 'Zé' });
+});
+
+test('resposta do painel num grupo é reconhecida como do operador pelo JID do grupo', () => {
+    const c = new Classificador();
+    c.registrarPendente({ reqId: 'req_g', conversaId: 'c_g', numero: '120363000000000001@g.us', texto: 'Já estou vendo' });
+    const ev = c.classificar(enviada(msg({ jid: '120363000000000001@g.us', fromMe: true, texto: 'Já estou vendo' })));
+    assert.equal(ev.autor, 'operador');
+    assert.equal(ev.reqId, 'req_g');
+    assert.deepEqual(ev.grupo, { jid: '120363000000000001@g.us' });
 });
 
 test('áudio e foto chegam com tipo; legenda vira texto', () => {

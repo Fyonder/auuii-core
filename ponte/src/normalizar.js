@@ -68,7 +68,11 @@ function nomeDoEvento(body) {
 function destinoDaMensagem(data) {
     const key = data?.key || {};
     const jid = String(key.remoteJid || '');
-    if (!jid || /@(g\.us|newsletter|broadcast)$/.test(jid) || jid === 'status@broadcast') return null;
+    if (!jid || /@(newsletter|broadcast)$/.test(jid) || jid === 'status@broadcast') return null;
+    // Grupo (dono, 13/10/2026: "preciso de mensagens dos grupos" — os grupos de suporte dos
+    // restaurantes ficam no número do suporte). A conversa é o grupo; quem escreveu vai em
+    // `participante`. Sem telefone: o id do grupo não é um número de ninguém.
+    if (jid.endsWith('@g.us')) return { jid, telefone: null, lid: null, grupo: true };
     if (jid.endsWith('@s.whatsapp.net')) return { jid, telefone: digitos(jid.split('@')[0]), lid: null };
     if (jid.endsWith('@lid')) {
         const alternativas = [key.remoteJidAlt, key.senderPn, data.senderPn, key.participantAlt];
@@ -82,6 +86,19 @@ function destinoDaMensagem(data) {
         };
     }
     return null;
+}
+
+/** Quem escreveu num grupo: telefone (quando o WhatsApp dá) e nome do WhatsApp. */
+function participanteDoGrupo(data) {
+    const key = data?.key || {};
+    const candidatos = [key.participant, key.participantAlt, key.senderPn, data?.senderPn];
+    const pn = candidatos.find((a) => typeof a === 'string' && a.endsWith('@s.whatsapp.net'));
+    const jid = typeof key.participant === 'string' ? key.participant : null;
+    return {
+        jid,
+        telefone: pn ? digitos(pn.split('@')[0]) : null,
+        nome: data?.pushName ? String(data.pushName).slice(0, 120) : null,
+    };
 }
 
 function tipoETexto(data) {
@@ -164,6 +181,10 @@ class Classificador {
             tipo: conteudo.tipo,
             em: emMs(data.messageTimestamp),
         };
+        if (destino.grupo) {
+            base.grupo = { jid: destino.jid };
+            base.participante = participanteDoGrupo(data);
+        }
 
         if (!data.key.fromMe) return { ...base, autor: 'contato', nome: data.pushName || null };
 
@@ -191,4 +212,4 @@ class Classificador {
     }
 }
 
-module.exports = { Classificador, chaveCanonica, destinoDaMensagem, tipoETexto, emMs, nomeDoEvento };
+module.exports = { Classificador, chaveCanonica, destinoDaMensagem, participanteDoGrupo, tipoETexto, emMs, nomeDoEvento };

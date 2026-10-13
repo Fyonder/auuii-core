@@ -136,6 +136,71 @@ passou pra Nina. Ficam os dois rodando:
 - Risco: o número da Auuii agora manda os avisos em volume; a fila com proteção (2/min, 30/h,
   1 código por número a cada 5 min) é o que segura o ban que derrubou o da Goby em 08/10.
 
+### 12/10: o número da Goby voltou pra Evolution; a Auuii tem instância própria (Duda desligada)
+
+O número da Goby (44 9164-9192) saiu da Meta e foi conectado de novo na Evolution. Ele estava
+na instância `auuii`; ela foi **renomeada pra `goby`** (`UPDATE "Instance" SET name='goby'` no
+Postgres da Evolution mais restart: tudo na Evolution aponta pelo id da instância, não pelo
+nome, então a sessão do WhatsApp sobrevive). Uma instância `auuii` **nova** foi criada pro
+número da Auuii, com webhook `http://n8n:5678/webhook/auuii` (fluxo da Duda, `nxu08x6DbZRZKpK4`,
+que continua **despublicado**: mensagem nesse número fica sem resposta até ligar a Duda).
+
+| Número | Instância | Caminho | Pra quê |
+|---|---|---|---|
+| Da Goby | `goby` | webhook → n8n `/webhook/goby` | Nina + avisos do robô (`AVISOS_INSTANCIA=goby`) + aviso interno (`NINA_AVISO_INSTANCIA=goby`) |
+| Da Auuii | `auuii` | webhook → n8n `/webhook/auuii` | Duda (desligada por enquanto) |
+
+A parte da Meta ficou **desligada** pelo `.env` do Kali, sem mexer em código nem no fluxo:
+`NINA_WHATSAPP_URL=` (vazio: a Nina volta a chamar a Evolution), `EVOLUTION_DA_META=` (a ponte
+não junta mais conversas), `META_PHONE_NUMBER_ID` comentado (a ponte loga "número da Meta
+desligado") e `META_INSTANCIA=meta-desligada`. Esse último é necessário: com a Meta desligada
+a ponte ainda mandaria pela Graph API qualquer envio do painel pra instância que tiver o nome
+de `META_INSTANCIA` (padrão `goby`), e falharia. Pra voltar à Meta: tirar essas linhas e seguir
+"Ligar" acima. Backups de antes em `~/backups-n8n/*antes-goby-20261012*`.
+
+### 12/10: número de suporte da Goby, só humanos (instância `goby-suporte`)
+
+Pedido do dono: "uma nova instância, conectada ao meu painel, onde vai responder o suporte
+completo da Goby", com **dois botões** no painel: o WhatsApp da Nina e o do suporte. A equipe
+responde pelo painel e a resposta sai pelo número do suporte.
+
+| | Nina (`goby`) | Suporte (`goby-suporte`) |
+|---|---|---|
+| Webhook da instância | n8n `/webhook/goby` | **nenhum** (sem IA) |
+| Quem responde | Nina; a equipe quando precisa | só a equipe, pelo painel |
+| Fila "precisa de humano" | quando a Nina escala | **toda mensagem do contato** entra, até alguém responder |
+| Quem é | PickNGo (telefone, nome, CNPJ) | o mesmo (o vínculo pelo nome vale pros dois números) |
+
+- A instância foi criada na Evolution sem webhook próprio; o webhook **global** (ponte) já
+  entrega os eventos dela ao backend, que a conhece em `INSTANCIAS['goby-suporte']`
+  (`empresa: 'Goby'`, `persona: null`, `iaDesligada`, `soHumano`) e separa as conversas
+  por instância. Backend em `feat/numero-suporte-goby` (Auuii-Backend); painel idem
+  (goby-by-auuii): botões **Nina / Suporte** no lugar de Todas / Goby, sem menu de pausa
+  na conversa do suporte, "O que a IA sabe" só mostra a Nina.
+- Conversa nova pelo telefone (lista de motoristas) continua saindo pelo número da Nina; a
+  rota `POST /api/admin/whatsapp/conversas` aceita `instancia: "goby-suporte"` se o painel
+  quiser oferecer a escolha.
+- Pra ligar: QR da instância `goby-suporte` com o celular do número de suporte
+  (`GET /instance/connect/goby-suporte`). Ordem de deploy: backend → painel; antes do backend
+  novo, mensagem nesse número cai como "auuii" (escondida do painel).
+
+### 13/10: grupos do número do suporte viram conversa
+
+Pedido do dono: "preciso de mensagens dos grupos". O número do suporte está nos grupos de
+suporte dos restaurantes (24 grupos em 13/10). Até aqui a ponte descartava tudo que era grupo.
+
+- **Ponte** (`normalizar.js`): `…@g.us` vira evento com `grupo: { jid, nome }` e
+  `participante: { jid, telefone, nome }` (telefone só quando o WhatsApp dá, via
+  `participantAlt`). O nome do grupo vem de `GET /group/findGroupInfos` na Evolution, guardado
+  24 h na ponte. Envio pro grupo manda o JID inteiro pra Evolution (`number: "…@g.us"`).
+- **Backend**: a conversa é o grupo (`idConversa({ grupo })`), `perfil: "grupo"`, nome = assunto;
+  cada mensagem do contato guarda `participante` e a prévia leva `quem`. Mensagem em grupo chama
+  o atendente como qualquer outra do número do suporte.
+- **Painel**: perfil "Grupo", cada bolha do contato diz quem escreveu, prévia "Nome: texto".
+- Na Evolution a instância precisa de `groupsIgnore: false` (o dono já ligou em 13/10). O
+  número da Nina (`goby`) continua com `groupsIgnore: true`.
+
+
 ### O que a Nina consulta (só leitura, só do entregador que está falando)
 
 | Ferramenta no n8n | Rota | Parâmetro |
