@@ -1,0 +1,521 @@
+{
+  "id": "ninaAprendeSup01",
+  "name": "Nina aprende com o suporte",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 3 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Toda madrugada",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "03:30 (horário do Kali, America/Sao_Paulo)",
+      "id": "7a1e0c3b-5d2f-4e8a-9b10-000000000001"
+    },
+    {
+      "parameters": {},
+      "name": "Testar leitura (sem IA)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "notesInFlow": true,
+      "notes": "só conta: não chama a Groq nem grava nada",
+      "id": "7a1e0c3b-5d2f-4e8a-9b10-000000000002"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/aprender/estado",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-suporte-api-key",
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Estado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        100
+      ],
+      "id": "7a1e0c3b-5d2f-4e8a-9b10-000000000003"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/aprender/existentes",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-suporte-api-key",
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Existentes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        100
+      ],
+      "id": "7a1e0c3b-5d2f-4e8a-9b10-000000000004"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lê o número do suporte na Evolution e monta os lotes pra Groq. Só texto LIMPO sai daqui.\nconst num = (k, d) => { const v = Number($env[k]); return Number.isFinite(v) && v > 0 ? v : d; };\nconst INSTANCIA = $env.NINA_APRENDE_INSTANCIA || 'goby-suporte';\nconst DIAS_HISTORICO = num('NINA_APRENDE_HISTORICO_DIAS', 90);\nconst FATIA_DIAS = num('NINA_APRENDE_FATIA_DIAS', 5);\nconst MAX_LOTES = num('NINA_APRENDE_MAX_LOTES', 40);\nconst LOTE_CHARS = num('NINA_APRENDE_LOTE_CHARS', 16000);\nconst PAGINA = 1000;\nconst NOVO_ATENDIMENTO_S = 6 * 3600;   // 6 h sem mensagem: é outro atendimento\nconst TURNO_MAX = 300;                 // letras por fala (várias mensagens seguidas = uma fala)\nconst ATENDIMENTO_MAX = 2500;          // letras por atendimento\nlet seco = false;\ntry { seco = !!$('Testar leitura (sem IA)').isExecuted; } catch (e) { seco = false; }\n\nconst estado = ($('Estado').first().json || {}).estado || {};\nconst agora = Math.floor(Date.now() / 1000);\nconst recenteDe = Number.isInteger(estado.ultimoTs) ? estado.ultimoTs : agora - 86400;\nconst alvoHistorico = agora - DIAS_HISTORICO * 86400;\nconst histAte = Number.isInteger(estado.historicoAte) ? estado.historicoAte : recenteDe;\nconst querHistorico = !estado.historicoCompleto && histAte > alvoHistorico;\nconst histDe = Math.max(alvoHistorico, histAte - FATIA_DIAS * 86400);\n\n// ── Evolution: da mais nova pra mais antiga. Acha a página da data por busca binária. ──\nconst pedir = async (page) => {\n  const r = await this.helpers.httpRequest({\n    method: 'POST',\n    url: `${$env.EVOLUTION_API_URL}/chat/findMessages/${INSTANCIA}`,\n    headers: { apikey: $env.EVOLUTION_API_KEY, 'Content-Type': 'application/json' },\n    body: { page, offset: PAGINA },\n    json: true,\n    timeout: 60000,\n  });\n  const m = (r && r.messages) || {};\n  return { pages: Number(m.pages) || 0, records: Array.isArray(m.records) ? m.records : [] };\n};\nlet primeira = null;\nconst paginas = new Map();\nconst pagina = async (p) => {\n  if (!paginas.has(p)) paginas.set(p, (await pedir(p)).records);\n  return paginas.get(p);\n};\nconst tsDe = (r) => Number(r && r.messageTimestamp) || 0;\nconst maisVelha = (recs) => (recs.length ? tsDe(recs[recs.length - 1]) : -Infinity);\nasync function lerJanela(de, ate) {\n  if (!primeira) { primeira = await pedir(1); paginas.set(1, primeira.records); }\n  const total = primeira.pages;\n  if (!total || de > ate) return [];\n  let lo = 1, hi = total;\n  while (lo < hi) {\n    const meio = Math.floor((lo + hi) / 2);\n    if (maisVelha(await pagina(meio)) <= ate) hi = meio; else lo = meio + 1;\n  }\n  const saida = [];\n  for (let p = lo; p <= total; p++) {\n    const recs = await pagina(p);\n    for (const r of recs) { const ts = tsDe(r); if (ts >= de && ts <= ate) saida.push(r); }\n    if (maisVelha(recs) < de) break;\n  }\n  return saida;\n}\n\n// ── Limpeza de dado pessoal (antes de qualquer coisa sair do Kali) ──\nconst TROCAS = [\n  [/https?:\\/\\/\\S+|www\\.\\S+/gi, '[link]'],\n  [/[^\\s@]+@[^\\s@]+\\.[^\\s@]+/g, '[email]'],\n  [/\\b\\d{2}\\.?\\d{3}\\.?\\d{3}\\/?\\d{4}-?\\d{2}\\b/g, '[cnpj]'],\n  [/\\b\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}\\b/g, '[cpf]'],\n  [/(?:\\+?55[\\s.-]?)?\\(?\\b\\d{2}\\)?[\\s.-]?9?[\\s.-]?\\d{4}[\\s.-]?\\d{4}\\b/g, '[telefone]'],\n  [/R\\$\\s?\\d[\\d.,]*|\\b\\d+(?:[.,]\\d{1,2})?\\s?(?:reais|real|conto|pila)\\b|\\b\\d+,\\d{2}\\b/gi, '[valor]'],\n  [/\\b[A-Za-z]{3}-?\\d[A-Za-z0-9]\\d{2}\\b/g, '[placa]'],\n  [/\\b(?:rua|r\\.|av\\.?|avenida|travessa|tv\\.|alameda|rodovia|estrada)\\s+[^,\\n.!?]{2,40}(?:,?\\s*(?:n[ºo°]?\\.?\\s*)?\\d+)?/gi, '[endereço]'],\n  [/\\b\\d{5,}\\b/g, '[número]'],\n];\nconst escapa = (s) => s.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nfunction limpar(texto, nomes) {\n  let t = String(texto || '');\n  for (const [re, marca] of TROCAS) t = t.replace(re, marca);\n  for (const n of nomes) t = t.replace(new RegExp(`(^|[^\\\\p{L}])${escapa(n)}(?=$|[^\\\\p{L}])`, 'giu'), `$1[nome]`);\n  return t.replace(/\\s+/g, ' ').trim();\n}\n// Palavras do nome do WhatsApp de quem escreveu (≥ 3 letras). Também tira \"Goby\", que\n// aparece em todo canto e não é dado pessoal — não deixa virar [nome].\nconst LIVRES = new Set(['goby', 'delivery', 'suporte', 'motoboy', 'entregas', 'loja']);\nconst nomesDe = (pushName) => String(pushName || '').split(/[^\\p{L}]+/u)\n  .filter((p) => p.length >= 3 && !LIVRES.has(p.toLowerCase()));\n\nconst MIDIA = {\n  audioMessage: '[áudio]', imageMessage: '[foto]', stickerMessage: '[figurinha]', videoMessage: '[vídeo]',\n  locationMessage: '[localização]', liveLocationMessage: '[localização]', documentMessage: '[documento]',\n  contactMessage: '[contato]', ptvMessage: '[vídeo]',\n};\nfunction textoDe(r) {\n  const m = r.message || {};\n  const t = m.conversation || (m.extendedTextMessage && m.extendedTextMessage.text)\n    || (m.imageMessage && m.imageMessage.caption) || (m.videoMessage && m.videoMessage.caption) || '';\n  return t ? String(t) : (MIDIA[r.messageType] || '');\n}\nconst privado = (jid) => !!jid && !/@g\\.us$|@broadcast$|@newsletter$/.test(jid);\n\n// ── Atendimentos: conversa privada, cortada a cada 6 h de silêncio, com resposta da equipe ──\nfunction atendimentos(registros) {\n  const porChat = new Map();\n  const vistos = new Set();\n  for (const r of registros) {\n    const k = r.key || {};\n    if (!privado(k.remoteJid) || vistos.has(k.id || r.id)) continue;\n    vistos.add(k.id || r.id);\n    const texto = textoDe(r);\n    if (!texto) continue;\n    if (!porChat.has(k.remoteJid)) porChat.set(k.remoteJid, []);\n    porChat.get(k.remoteJid).push({ ts: tsDe(r), eu: k.fromMe === true, texto, nome: k.fromMe ? '' : r.pushName });\n  }\n  const saida = [];\n  for (const msgs of porChat.values()) {\n    msgs.sort((a, b) => a.ts - b.ts);\n    const nomes = [...new Set(msgs.flatMap((m) => nomesDe(m.nome)))];\n    let atual = null;\n    const fecha = () => {\n      if (!atual) return;\n      const temPergunta = atual.falas.some((f) => !f.eu);\n      const respondeu = atual.falas.some((f, i) => f.eu && atual.falas.slice(0, i).some((g) => !g.eu));\n      if (temPergunta && respondeu) saida.push(atual);\n      atual = null;\n    };\n    for (const m of msgs) {\n      if (!atual || m.ts - atual.fim > NOVO_ATENDIMENTO_S) { fecha(); atual = { inicio: m.ts, fim: m.ts, falas: [] }; }\n      atual.fim = m.ts;\n      const limpo = limpar(m.texto, nomes);\n      const ult = atual.falas[atual.falas.length - 1];\n      if (ult && ult.eu === m.eu) ult.texto = `${ult.texto} / ${limpo}`.slice(0, TURNO_MAX);\n      else atual.falas.push({ eu: m.eu, texto: limpo.slice(0, TURNO_MAX) });\n    }\n    fecha();\n  }\n  return saida;\n}\nconst comoTexto = (a, n) => `Conversa ${n}:\\n${a.falas.map((f) => `${f.eu ? 'S' : 'M'}: ${f.texto}`).join('\\n')}`.slice(0, ATENDIMENTO_MAX);\n\n// ── Recente primeiro (em ordem), depois o histórico (do mais novo pro mais velho) ──\nconst recentes = atendimentos(await lerJanela(recenteDe, agora)).sort((a, b) => a.inicio - b.inicio);\nconst historico = querHistorico\n  ? atendimentos(await lerJanela(histDe, histAte - 1)).sort((a, b) => b.inicio - a.inicio)\n  : [];\n\nconst lotes = [];\nlet lote = null;\nlet n = 0;\nconst cabe = (txt) => lote && lote.texto.length + txt.length + 2 <= LOTE_CHARS;\nfunction poe(a, origem) {\n  const txt = comoTexto(a, n + 1);\n  if (!cabe(txt)) {\n    if (lotes.length >= MAX_LOTES) return false;\n    lote = { texto: '', conversas: 0, origem };\n    lotes.push(lote);\n  }\n  n += 1;\n  lote.texto += (lote.texto ? '\\n\\n' : '') + comoTexto(a, n);\n  lote.conversas += 1;\n  return true;\n}\n// Estourou a cota: para a noite ali. O que ficou é lido na próxima (o marcador para antes).\nlet novoUltimoTs = agora;\nlet cheio = false;\nfor (const a of recentes) { if (!poe(a, 'recente')) { novoUltimoTs = a.inicio - 1; cheio = true; break; } }\nlet novoHistoricoAte = querHistorico ? histDe : histAte;\nif (cheio) novoHistoricoAte = histAte;\nelse for (const a of historico) { if (!poe(a, 'historico')) { novoHistoricoAte = a.fim + 1; break; } }\n\nconst meta = {\n  estado: {\n    ultimoTs: Math.max(novoUltimoTs, recenteDe),\n    historicoAte: Math.min(novoHistoricoAte, histAte),\n    historicoCompleto: estado.historicoCompleto === true || Math.min(novoHistoricoAte, histAte) <= alvoHistorico,\n  },\n  resumo: {\n    atendimentosRecentes: recentes.length,\n    atendimentosHistorico: historico.length,\n    conversas: n,\n    lotes: lotes.length,\n    paginasLidas: paginas.size,\n  },\n  seco,\n};\nif (seco) return [{ json: { seco: true, meta } }];\nif (!lotes.length) return [{ json: { vazio: true, meta } }];\nreturn lotes.map((l, i) => ({ json: { lote: i + 1, texto: l.texto, conversas: l.conversas, origem: l.origem, meta } }));\n"
+      },
+      "name": "Monta lotes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        100
+      ],
+      "id": "7a1e0c3b-5d2f-4e8a-9b10-000000000005",
+      "notesInFlow": true,
+      "notes": "lê a Evolution, limpa dado pessoal, monta lotes"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7a1e0c3b-5d2f-4e8a-9b10-000000000006-c",
+              "leftValue": "={{ !!$json.texto }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "Tem lote?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        100
+      ],
+      "id": "7a1e0c3b-5d2f-4e8a-9b10-000000000006"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $env.NINA_APRENDE_MODELO || 'openai/gpt-oss-120b', temperature: 0.2, reasoning_effort: $env.NINA_APRENDE_RACIOCINIO || 'medium', max_completion_tokens: 8000, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: \"Você analisa conversas do SUPORTE HUMANO da Goby, um app de entregas (delivery). Quem escreve (M) é motoboy/entregador ou restaurante/loja; quem responde (S) é a equipe de suporte. Os dados pessoais já foram trocados por marcadores como [nome], [telefone], [valor], [placa], [endereço], [número].\\n\\nObjetivo: ensinar a Nina, a assistente virtual da Goby, a atender casos PARECIDOS do jeito que a equipe atende.\\n\\nTire do lote:\\n1. \\\"regras\\\": situações que se repetem e o que a equipe faz, responde ou pergunta de volta. Cada regra:\\n   - em português, 1 ou 2 frases, até 300 caracteres, começando com \\\"Quando\\\";\\n   - geral: nunca cite nome, telefone, valor em dinheiro, placa, endereço, número de pedido, nome de loja ou bairro;\\n   - só o que a equipe de fato fez: não invente política, prazo nem valor;\\n   - fora: assunto interno da equipe, brincadeira, conversa pessoal, caso que só fez sentido uma vez;\\n   - \\\"tema\\\": 1 a 3 palavras (ex.: retirada, pedido junto, cliente não atende, pagamento, app, cadastro, corridas e vagas);\\n   - \\\"conversas\\\": os números das conversas deste lote em que a situação aparece.\\n2. \\\"jeito\\\": até 3 frases curtas sobre o JEITO de a equipe falar (tom, tamanho, como cumprimenta, como encerra), se der pra ver.\\n\\nResponda SÓ JSON: {\\\"regras\\\":[{\\\"texto\\\":\\\"...\\\",\\\"tema\\\":\\\"...\\\",\\\"conversas\\\":[1,4]}],\\\"jeito\\\":[\\\"...\\\"]}. Sem regra boa no lote: {\\\"regras\\\":[],\\\"jeito\\\":[]}.\" }, { role: 'user', content: $json.texto } ] }) }}",
+        "options": {
+          "timeout": 120000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 20000
+            }
+          }
+        }
+      },
+      "name": "Groq lê o lote",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        0
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "gaY6xZiXOm9LALP6",
+          "name": "Groq account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "id": "7a1e0c3b-5d2f-4e8a-9b10-000000000007"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Junta as regras de todos os lotes numa lista de candidatas, pra Groq juntar as parecidas.\nconst lotes = $('Monta lotes').all().map((i) => i.json);\nconst respostas = $input.all();\nconst candidatas = [];\nlet falhas = 0;\nrespostas.forEach((it, i) => {\n  const conteudo = it.json && it.json.choices && it.json.choices[0] && it.json.choices[0].message && it.json.choices[0].message.content;\n  let j = null;\n  try { j = JSON.parse(conteudo); } catch (e) { j = null; }\n  if (!j || typeof j !== 'object') { falhas += 1; return; }\n  const noLote = (lotes[i] && lotes[i].conversas) || 0;\n  for (const r of Array.isArray(j.regras) ? j.regras : []) {\n    const texto = String((r && r.texto) || '').replace(/\\s+/g, ' ').trim();\n    if (texto.length < 10) continue;\n    const ids = new Set((Array.isArray(r.conversas) ? r.conversas : []).map(Number).filter(Number.isFinite));\n    candidatas.push({ texto: texto.slice(0, 400), tema: String(r.tema || '').slice(0, 40), conversas: Math.max(1, Math.min(ids.size, noLote || ids.size)) });\n  }\n  for (const t of Array.isArray(j.jeito) ? j.jeito.slice(0, 3) : []) {\n    const texto = String(t || '').replace(/\\s+/g, ' ').trim();\n    // O jeito de falar vale pro lote inteiro: conta as conversas dele.\n    if (texto.length >= 10) candidatas.push({ texto: texto.slice(0, 400), tema: 'jeito de falar', conversas: Math.max(1, noLote) });\n  }\n});\ncandidatas.sort((a, b) => b.conversas - a.conversas);\nconst top = candidatas.slice(0, 200);\nconst conhecidos = (($('Existentes').first().json || {}).conhecidos || []).slice(0, 100).map((t) => String(t).slice(0, 160));\nconst pedido = [\n  'JÁ SABE:',\n  conhecidos.length ? conhecidos.map((t) => `- ${t}`).join('\\n') : '(nada ainda)',\n  '',\n  'CANDIDATAS:',\n  top.map((c, i) => `${i}. [${c.tema || 'sem tema'}] ${c.texto} (${c.conversas} conversas)`).join('\\n'),\n].join('\\n');\nreturn [{ json: { candidatas: top, falhas, lotes: respostas.length, pedido } }];\n"
+      },
+      "name": "Junta o que achou",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        0
+      ],
+      "id": "7a1e0c3b-5d2f-4e8a-9b10-000000000008"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7a1e0c3b-5d2f-4e8a-9b10-000000000009-c",
+              "leftValue": "={{ $json.candidatas.length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "Tem candidata?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        0
+      ],
+      "id": "7a1e0c3b-5d2f-4e8a-9b10-000000000009"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $env.NINA_APRENDE_MODELO || 'openai/gpt-oss-120b', temperature: 0.2, reasoning_effort: $env.NINA_APRENDE_RACIOCINIO || 'medium', max_completion_tokens: 8000, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: \"Você junta regras de atendimento tiradas de vários lotes de conversas do suporte da Goby (delivery), pra ensinar a Nina, a assistente virtual. Você recebe:\\n- JÁ SABE: o que a Nina já sabe, ou que um gerente já recusou. Não devolva nada com o mesmo sentido.\\n- CANDIDATAS: numeradas a partir de 0, com o tema e em quantas conversas apareceram.\\n\\nFaça:\\n1. Junte as candidatas com o MESMO sentido numa regra só e liste os números delas em \\\"de\\\".\\n2. Reescreva cada regra clara e geral, em português, começando com \\\"Quando\\\", até 300 caracteres. Sem nome, telefone, valor em dinheiro, placa, endereço, número de pedido ou nome de loja, e sem marcadores como [nome].\\n3. Do jeito de falar (tema \\\"jeito de falar\\\"), no máximo 2 regras, começando com \\\"Ao responder\\\".\\n4. Descarte o que for caso isolado, confuso, contraditório entre as candidatas, ou que prometa valor, prazo ou política que a equipe não deixou claro.\\n5. No máximo 30 regras, as mais úteis primeiro.\\n\\nResponda SÓ JSON: {\\\"regras\\\":[{\\\"texto\\\":\\\"...\\\",\\\"tema\\\":\\\"...\\\",\\\"de\\\":[0,3,7]}]}. Nada pra ensinar: {\\\"regras\\\":[]}.\" }, { role: 'user', content: $json.pedido } ] }) }}",
+        "options": {
+          "timeout": 120000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 20000
+            }
+          }
+        }
+      },
+      "name": "Groq junta parecidas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        -100
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "gaY6xZiXOm9LALP6",
+          "name": "Groq account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "id": "7a1e0c3b-5d2f-4e8a-9b10-000000000010"
+    },
+    {
+      "parameters": {
+        "jsCode": "// O que vai pro backend: só regra que apareceu em conversas o bastante, sem marcador sobrando.\nconst num = (k, d) => { const v = Number($env[k]); return Number.isFinite(v) && v > 0 ? v : d; };\nconst MIN = num('NINA_APRENDE_MIN_CONVERSAS', 3);\nconst junta = $('Junta o que achou').first().json;\nconst resposta = $input.first().json || {};\nconst conteudo = resposta.choices && resposta.choices[0] && resposta.choices[0].message && resposta.choices[0].message.content;\nlet j = null;\ntry { j = JSON.parse(conteudo); } catch (e) { j = null; }\nconst consolidou = !!(j && Array.isArray(j.regras));\nconst MARCADOR = /\\[(?:nome|telefone|valor|placa|endere[cç]o|cpf|cnpj|email|link|n[uú]mero)\\]/i;\nconst porTexto = new Map();\nfor (const r of consolidou ? j.regras : []) {\n  const texto = String((r && r.texto) || '').replace(/\\s+/g, ' ').trim().slice(0, 500);\n  if (texto.length < 10 || MARCADOR.test(texto)) continue;\n  const de = [...new Set((Array.isArray(r.de) ? r.de : []).map(Number))]\n    .filter((i) => Number.isInteger(i) && i >= 0 && i < junta.candidatas.length);\n  const conversas = de.reduce((s, i) => s + junta.candidatas[i].conversas, 0);\n  if (conversas < MIN) continue;\n  const tema = String(r.tema || (de.length ? junta.candidatas[de[0]].tema : '') || '').slice(0, 40);\n  const ja = porTexto.get(texto);\n  if (!ja || ja.conversas < conversas) porTexto.set(texto, { texto, tema, conversas });\n}\nconst sugestoes = [...porTexto.values()].sort((a, b) => b.conversas - a.conversas).slice(0, 30);\n// Avança o marcador só se a noite rendeu: junção ok e no máximo metade dos lotes com erro.\nconst avancar = consolidou && junta.falhas <= junta.lotes / 2;\nreturn [{ json: { sugestoes, avancar, falhas: junta.falhas, candidatas: junta.candidatas.length } }];\n"
+      },
+      "name": "Prepara envio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        -100
+      ],
+      "id": "7a1e0c3b-5d2f-4e8a-9b10-000000000011",
+      "notesInFlow": true,
+      "notes": "mín. de conversas, sem marcador, até 30"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/aprender/sugestoes",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-suporte-api-key",
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sugestoes: $json.sugestoes }) }}"
+      },
+      "name": "Manda sugestões",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        -100
+      ],
+      "id": "7a1e0c3b-5d2f-4e8a-9b10-000000000012"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fecha a rodada: até onde leu (se a noite rendeu) e o resumo pra quem abrir o banco.\nconst monta = $('Monta lotes').first().json;\nconst meta = monta.meta || {};\nif (meta.seco) return [];\nconst executou = (nome) => { try { return !!$(nome).isExecuted; } catch (e) { return false; } };\nconst prep = executou('Prepara envio') ? $('Prepara envio').first().json : null;\nconst junta = executou('Junta o que achou') ? $('Junta o que achou').first().json : null;\nconst envio = executou('Manda sugestões') ? ($('Manda sugestões').first().json || {}) : {};\nlet avancar;\nif (monta.vazio) avancar = true;                                    // nada pra ler: anda\nelse if (prep) avancar = prep.avancar;\nelse avancar = !!junta && junta.falhas <= junta.lotes / 2;           // leu, mas nada virou candidata\nconst corpo = avancar ? { ...meta.estado } : {};\ncorpo.ultimaRodada = {\n  ...(meta.resumo || {}),\n  candidatas: junta ? junta.candidatas.length : 0,\n  falhas: junta ? junta.falhas : 0,\n  sugeridas: prep ? prep.sugestoes.length : 0,\n  criadas: Number(envio.criadas) || 0,\n  somadas: Number(envio.somadas) || 0,\n  avancou: avancar ? 1 : 0,\n};\nreturn [{ json: corpo }];\n"
+      },
+      "name": "Fecha a rodada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        100
+      ],
+      "id": "7a1e0c3b-5d2f-4e8a-9b10-000000000013",
+      "notesInFlow": true,
+      "notes": "avança o marcador só se a noite rendeu"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/aprender/estado",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-suporte-api-key",
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "name": "Salva até onde leu",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        100
+      ],
+      "id": "7a1e0c3b-5d2f-4e8a-9b10-000000000014"
+    }
+  ],
+  "connections": {
+    "Toda madrugada": {
+      "main": [
+        [
+          {
+            "node": "Estado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Testar leitura (sem IA)": {
+      "main": [
+        [
+          {
+            "node": "Estado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Estado": {
+      "main": [
+        [
+          {
+            "node": "Existentes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Existentes": {
+      "main": [
+        [
+          {
+            "node": "Monta lotes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monta lotes": {
+      "main": [
+        [
+          {
+            "node": "Tem lote?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem lote?": {
+      "main": [
+        [
+          {
+            "node": "Groq lê o lote",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fecha a rodada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq lê o lote": {
+      "main": [
+        [
+          {
+            "node": "Junta o que achou",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Junta o que achou": {
+      "main": [
+        [
+          {
+            "node": "Tem candidata?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem candidata?": {
+      "main": [
+        [
+          {
+            "node": "Groq junta parecidas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fecha a rodada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq junta parecidas": {
+      "main": [
+        [
+          {
+            "node": "Prepara envio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepara envio": {
+      "main": [
+        [
+          {
+            "node": "Manda sugestões",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manda sugestões": {
+      "main": [
+        [
+          {
+            "node": "Fecha a rodada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fecha a rodada": {
+      "main": [
+        [
+          {
+            "node": "Salva até onde leu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "timezone": "America/Sao_Paulo"
+  },
+  "pinData": {},
+  "active": false
+}

@@ -353,6 +353,21 @@ motoboy/loja/cliente ─▶ identificar ─ `aprendizados` ─▶ prompt, logo a
 - Fluxo novo com backend velho: as 3 ferramentas dão 404 (a Nina diz que a consulta não
   respondeu) e `aprendizados` vem vazio. Ordem: backend → fluxo → painel.
 
+## Nina aprende com o suporte (13/10/2026)
+
+O dono pediu: "a Nina aprende a conversar com as mensagens do número do suporte". O número é o Goby.delivery, instância `goby-suporte`, onde a Nina não responde.
+
+- **Fluxo:** `nina-aprende-suporte.json` (id `ninaAprendeSup01`), gerado por `n8n/geradores/nina_aprende_suporte.py`. Roda toda madrugada às 03:30.
+- **Leitura:** lê a Evolution (`findMessages`, com busca binária pela data). Ficam só as conversas privadas que a equipe respondeu.
+- **Limpeza:** troca dado pessoal por marcador **antes** de mandar pra Groq.
+- **Lotes:** monta lotes com o que é novo e, com a sobra da cota, uma fatia do histórico de 90 dias.
+- **Groq:** tira regras "Quando…" em cada lote e depois junta as parecidas. Quem soma as conversas é o código.
+- **Sugestões:** regras com 3 conversas ou mais vão para `POST /api/suporte/goby/aprender/sugestoes`. Lá viram **sugestão**: só valem quando um gerente aprova no painel (Atendimento → O que a Nina aprendeu).
+- **Marcador de leitura:** fica em `GET/POST /api/suporte/goby/aprender/estado` e só anda pra frente. Noite ruim não avança.
+- **Variáveis opcionais no `.env`:** `NINA_APRENDE_*`. Veja a nota "Nina aprende com o suporte" no Obsidian.
+- **Testar sem Groq:** `docker exec auuii-n8n n8n execute --id=ninaAprendeSup01` roda o gatilho "Testar leitura (sem IA)". Ele só conta e não grava nada.
+- **Ordem de publicação:** backend → painel → importar e ativar o fluxo.
+
 ## Ligar
 
 No `.env` deste PC:

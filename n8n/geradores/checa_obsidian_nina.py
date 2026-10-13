@@ -21,7 +21,7 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parents[2]
 COFRE = Path(os.environ.get('NINA_OBSIDIAN', r'C:\Users\LENOVO\Documents\Celebro 2\nina'))
 FLUXO = RAIZ / 'n8n' / 'workflows' / 'atendimento-goby-nina.json'
-OUTROS_FLUXOS = ['goby-vez-na-fila.json']
+OUTROS_FLUXOS = ['goby-vez-na-fila.json', 'nina-aprende-suporte.json']
 
 
 def ferramentas_do_fluxo():
