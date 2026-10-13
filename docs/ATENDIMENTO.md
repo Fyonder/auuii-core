@@ -332,6 +332,42 @@ site ─▶ backend ─'nina' (ack)─▶ ponte ─▶ n8n /webhook/goby-teste �
   n8n e pra ponte (compose); sem ela, ou diferente, o chat da Nina nos sites para (a ponte loga
   e o site mostra o erro).
 
+## Gerente ensina a Nina (10/10/2026)
+
+No chat da Nina do Goby Suporte, quem tem `nina.ensinar` diz "anota: ..." e ela grava (etapa 29
+do gerador). Vale na hora pra todo mundo que escreve pra Nina.
+
+```
+gerente ─"anota: …"─▶ Nina (modo suporte, passe) ─▶ POST /api/suporte/goby/suporte/ensinar
+                                                     └─▶ Firestore nina_aprendizados
+motoboy/loja/cliente ─▶ identificar ─ `aprendizados` ─▶ prompt, logo abaixo do CONHECIMENTO
+```
+
+- Ferramentas do **Agente Nina (suporte)**: *Ensinar a Nina*, *O que a Nina aprendeu*, *Esquecer
+  ensinamento*. As rotas só aceitam o passe do painel (`x-nina-passe`): pelo WhatsApp do suporte
+  dão 403, porque o número é compartilhado e não diz quem ensinou.
+- O backend barra valor em dinheiro, telefone, CPF e e-mail, e devolve `feito:false` com o motivo
+  (a Nina repete). Esquecer desliga, não apaga.
+- `nina.ensinar` não nasce com o suporte: dar à mão aos gerentes. Ver a lista pede `nina.chat`.
+- Tela: Atendimento → **O que a Nina aprendeu** (`GET/POST/DELETE /api/admin/nina/aprendizados`).
+- Fluxo novo com backend velho: as 3 ferramentas dão 404 (a Nina diz que a consulta não
+  respondeu) e `aprendizados` vem vazio. Ordem: backend → fluxo → painel.
+
+## Nina aprende com o suporte (13/10/2026)
+
+O dono pediu: "a Nina aprende a conversar com as mensagens do número do suporte". O número é o Goby.delivery, instância `goby-suporte`, onde a Nina não responde.
+
+- **Fluxo:** `nina-aprende-suporte.json` (id `ninaAprendeSup01`), gerado por `n8n/geradores/nina_aprende_suporte.py`. Roda toda madrugada às 03:30.
+- **Leitura:** lê a Evolution (`findMessages`, com busca binária pela data). Ficam só as conversas privadas que a equipe respondeu.
+- **Limpeza:** troca dado pessoal por marcador **antes** de mandar pra Groq.
+- **Lotes:** monta lotes com o que é novo e, com a sobra da cota, uma fatia do histórico de 90 dias.
+- **Groq:** tira regras "Quando…" em cada lote e depois junta as parecidas. Quem soma as conversas é o código.
+- **Sugestões:** regras com 3 conversas ou mais vão para `POST /api/suporte/goby/aprender/sugestoes`. Lá viram **sugestão**: só valem quando um gerente aprova no painel (Atendimento → O que a Nina aprendeu).
+- **Marcador de leitura:** fica em `GET/POST /api/suporte/goby/aprender/estado` e só anda pra frente. Noite ruim não avança.
+- **Variáveis opcionais no `.env`:** `NINA_APRENDE_*`. Veja a nota "Nina aprende com o suporte" no Obsidian.
+- **Testar sem Groq:** `docker exec auuii-n8n n8n execute --id=ninaAprendeSup01` roda o gatilho "Testar leitura (sem IA)". Ele só conta e não grava nada.
+- **Ordem de publicação:** backend → painel → importar e ativar o fluxo.
+
 ## Ligar
 
 No `.env` deste PC:

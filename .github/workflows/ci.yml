@@ -32,6 +32,11 @@ jobs:
           python n8n/geradores/nina_goby.py
           git diff --exit-code -- n8n/workflows/atendimento-goby-nina.json
 
+      - name: Gerador da Nina aprende com o suporte (asserts + JSON em dia)
+        run: |
+          python n8n/geradores/nina_aprende_suporte.py
+          git diff --exit-code -- n8n/workflows/nina-aprende-suporte.json
+
       - name: Testes do fluxo gerado
         run: node --test n8n/test/*.test.js
 
