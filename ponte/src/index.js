@@ -282,7 +282,8 @@ async function atenderEnvio(pedido) {
         const resp = await fetch(`${cfg.evolutionUrl}/message/sendText/${encodeURIComponent(instanciaEvolution)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', apikey: cfg.evolutionKey },
-            body: JSON.stringify({ number: String(numero).split('@')[0].replace(/\D/g, ''), text: texto }),
+            // Grupo vai com o JID inteiro (…@g.us): só os dígitos a Evolution trataria como telefone.
+            body: JSON.stringify({ number: String(numero).endsWith('@g.us') ? String(numero) : String(numero).split('@')[0].replace(/\D/g, ''), text: texto }),
             signal: AbortSignal.timeout(20000),
         });
         const corpo = await resp.json().catch(() => ({}));
@@ -418,6 +419,29 @@ function lerCorpo(req) {
     });
 }
 
+// Nome do grupo (assunto) pela Evolution, guardado por 24 h: o webhook da mensagem não traz.
+const nomesDeGrupo = new Map();
+async function nomeDoGrupo(instancia, jid) {
+    const k = `${instancia}|${jid}`;
+    const c = nomesDeGrupo.get(k);
+    if (c && Date.now() - c.em < 24 * 3600000) return c.nome;
+    let nome = null;
+    try {
+        const resp = await fetch(`${cfg.evolutionUrl}/group/findGroupInfos/${encodeURIComponent(instancia)}?groupJid=${encodeURIComponent(jid)}`, {
+            headers: { apikey: cfg.evolutionKey },
+            signal: AbortSignal.timeout(8000),
+        });
+        const corpo = await resp.json().catch(() => ({}));
+        if (resp.ok && corpo?.subject) nome = String(corpo.subject).slice(0, 120);
+    } catch (err) {
+        log(`⚠️ nome do grupo ${jid.slice(0, 8)}… não veio: ${err.message}`);
+    }
+    // Sem nome, tenta de novo na próxima mensagem; com nome, guarda.
+    if (nome) nomesDeGrupo.set(k, { nome, em: Date.now() });
+    if (nomesDeGrupo.size > 2000) nomesDeGrupo.delete(nomesDeGrupo.keys().next().value);
+    return nome || c?.nome || null;
+}
+
 const caminhoDoWebhook = `/evolution/${cfg.segredo}`;
 
 const servidor = http.createServer(async (req, res) => {
@@ -463,6 +487,7 @@ const servidor = http.createServer(async (req, res) => {
     for (const e of eventos) {
         const ev = classificador.classificar(e);
         if (!ev) continue;
+        if (ev.grupo && body.instance) ev.grupo.nome = await nomeDoGrupo(body.instance, ev.grupo.jid);
         if (ev.autor === 'contato' && body.instance === cfg.evolutionDaMeta) lembrarCanal(ev.telefone || ev.jid, 'evolution');
         ultimaMensagemEm = Date.now();
         enfileirar('evento', ev);
