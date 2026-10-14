@@ -69,6 +69,9 @@ test('estrutura: os dois gatilhos levam ao Estado; Groq com a credencial e um lo
     assert.equal(no['Toda madrugada'].parameters.rule.interval[0].expression, '30 3 * * *');
     assert.deepEqual(destinos('Tem lote?', 0), ['Groq lê o lote']);
     assert.deepEqual(destinos('Tem lote?', 1), ['Fecha a rodada']);
+    assert.deepEqual(destinos('Tem candidata?', 0), ['Respira a cota'], 'pausa antes da junção');
+    assert.deepEqual(destinos('Respira a cota'), ['Groq junta parecidas']);
+    assert.ok(no['Respira a cota'].parameters.amount >= 60, 'deixa o minuto da Groq virar');
     assert.deepEqual(destinos('Tem candidata?', 1), ['Fecha a rodada']);
     assert.deepEqual(destinos('Manda sugestões'), ['Fecha a rodada']);
     assert.deepEqual(destinos('Fecha a rodada'), ['Salva até onde leu']);
@@ -77,7 +80,8 @@ test('estrutura: os dois gatilhos levam ao Estado; Groq com a credencial e um lo
         assert.equal(p.nodeCredentialType, 'groqApi');
         assert.equal(no[nome].credentials.groqApi.name, 'Groq account');
         assert.equal(p.options.batching.batch.batchSize, 1);
-        assert.ok(p.options.batching.batch.batchInterval >= 10000);
+        // Plano grátis da Groq: ~8 mil tokens/minuto por modelo; cada lote gasta ~5-7 mil.
+        assert.ok(p.options.batching.batch.batchInterval >= 60000, 'no máximo 1 lote por minuto');
         assert.equal(no[nome].onError, 'continueRegularOutput');
         assert.match(p.jsonBody, /json_object/);
     }
@@ -90,10 +94,40 @@ test('estrutura: os dois gatilhos levam ao Estado; Groq com a credencial e um lo
     assert.equal(fluxo.active, false, 'nasce desligado: liga no Kali depois do backend');
 });
 
-test('o corpo da Groq vira um JSON válido, com o lote no lugar certo', () => {
+const corpoDaGroq = (env = {}) => {
     const expr = no['Groq lê o lote'].parameters.jsonBody.replace(/^=\{\{\s*/, '').replace(/\s*\}\}$/, '');
-    const corpo = JSON.parse(new Function('$json', '$env', `return (${expr});`)({ texto: 'Conversa 1:\nM: oi\nS: oi' }, {}));
-    assert.equal(corpo.model, 'openai/gpt-oss-120b');
+    return JSON.parse(new Function('$json', '$env', `return (${expr});`)({ texto: 'Conversa 1:\nM: oi\nS: oi' }, env));
+};
+
+test('modelo SÓ do aprendizado (não o da Nina), resposta curta, sem reasoning_effort no Llama', () => {
+    const corpo = corpoDaGroq();
+    assert.match(corpo.model, /llama-4-scout/);
+    assert.notEqual(corpo.model, 'openai/gpt-oss-120b', 'o 120b é o da Nina: a cota dela não é dividida');
+    assert.ok(corpo.max_completion_tokens <= 3000);
+    assert.equal(corpo.reasoning_effort, undefined, 'a Groq devolve 400 pro Llama com reasoning_effort');
+    const gpt = corpoDaGroq({ NINA_APRENDE_MODELO: 'openai/gpt-oss-20b' });
+    assert.equal(gpt.model, 'openai/gpt-oss-20b');
+    assert.equal(gpt.reasoning_effort, 'low');
+});
+
+test('"Rodar agora" só roda com o segredo; sem ele, para no portão', () => {
+    assert.equal(no['Rodar agora'].type, 'n8n-nodes-base.webhook');
+    assert.equal(no['Rodar agora'].parameters.path, 'nina-aprende-rodar');
+    assert.deepEqual(destinos('Rodar agora'), ['Segredo confere?']);
+    assert.deepEqual(destinos('Segredo confere?', 0), ['Estado']);
+    assert.deepEqual(destinos('Segredo confere?', 1), []);
+    const expr = no['Segredo confere?'].parameters.conditions.conditions[0].leftValue.replace(/^=\{\{\s*/, '').replace(/\s*\}\}$/, '');
+    const confere = (headers, env) => new Function('$json', '$env', `return (${expr});`)({ headers }, env);
+    const S = 'x'.repeat(32);
+    assert.equal(confere({ 'x-nina-segredo': S }, { NINA_TESTE_SEGREDO: S }), true);
+    assert.equal(confere({ 'x-nina-segredo': 'errado' }, { NINA_TESTE_SEGREDO: S }), false);
+    assert.equal(confere({}, { NINA_TESTE_SEGREDO: S }), false);
+    assert.equal(confere({ 'x-nina-segredo': '' }, {}), false, 'sem a variável no .env, recusa tudo');
+    assert.equal(confere({ 'x-nina-segredo': 'curto' }, { NINA_TESTE_SEGREDO: 'curto' }), false, 'segredo curto não vale');
+});
+
+test('o corpo da Groq vira um JSON válido, com o lote no lugar certo', () => {
+    const corpo = corpoDaGroq();
     assert.equal(corpo.messages[0].role, 'system');
     assert.match(corpo.messages[0].content, /SUPORTE HUMANO da Goby/);
     assert.equal(corpo.messages[1].content, 'Conversa 1:\nM: oi\nS: oi');
