@@ -108,13 +108,16 @@ const corpoDaGroq = (env = {}) => {
 
 test('modelo SÓ do aprendizado (não o da Nina), resposta curta, reasoning_effort só nos gpt-oss', () => {
     const corpo = corpoDaGroq();
-    // 14/10/2026: o Llama 4 Scout saiu do catálogo da Groq (404 model_not_found nos 30 lotes).
-    assert.equal(corpo.model, 'openai/gpt-oss-20b');
-    assert.notEqual(corpo.model, 'openai/gpt-oss-120b', 'o 120b é o da Nina: a cota dela não é dividida');
+    // 14/10/2026: o Llama 4 Scout saiu do catálogo da Groq (404); o gpt-oss-20b é a reserva da
+    // Nina e tem teto por DIA (200 mil) que duas rodadas esgotaram. Fica o Qwen, só nosso.
+    assert.equal(corpo.model, 'qwen/qwen3.8-27b');
+    assert.ok(!/gpt-oss/.test(corpo.model), 'os gpt-oss são da Nina (120b) e da reserva dela (20b): cota por dia dividida');
     assert.ok(corpo.max_completion_tokens <= 3000);
-    assert.equal(corpo.reasoning_effort, 'low');
-    const juncao = JSON.parse(new Function('$json', '$env', `return (${no['Groq junta parecidas'].parameters.jsonBody.replace(/^=\{\{\s*/, '').replace(/\s*\}\}$/, '')});`)({ pedido: 'x' }, {}));
-    assert.equal(juncao.reasoning_effort, 'medium', 'a junção é uma chamada por noite e decide o que chega ao gerente');
+    assert.equal(corpo.reasoning_effort, undefined, 'reasoning_effort só existe nos gpt-oss');
+    const gpt = corpoDaGroq({ NINA_APRENDE_MODELO: 'openai/gpt-oss-20b' });
+    assert.equal(gpt.reasoning_effort, 'low');
+    const juncao = JSON.parse(new Function('$json', '$env', `return (${no['Groq junta parecidas'].parameters.jsonBody.replace(/^=\{\{\s*/, '').replace(/\s*\}\}$/, '')});`)({ pedido: 'x' }, { NINA_APRENDE_MODELO: 'openai/gpt-oss-20b' }));
+    assert.equal(juncao.reasoning_effort, 'medium', 'num gpt-oss, a junção (uma chamada por noite) pensa mais que os lotes');
     assert.match(no['Groq junta parecidas'].parameters.jsonBody, /Temas diferentes/);
     const llama = corpoDaGroq({ NINA_APRENDE_MODELO: 'llama-3.3-70b-versatile' });
     assert.equal(llama.model, 'llama-3.3-70b-versatile');

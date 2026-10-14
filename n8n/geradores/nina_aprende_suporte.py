@@ -48,10 +48,13 @@ CHAVE = {"parameters": [{"name": "x-suporte-api-key", "value": "={{ $env.AUUII_A
 # voltaram 429 e, pior, a rodada comia a cota do DIA da Nina. Decisão do dono: o aprendizado usa
 # um modelo SÓ DELE (MODELO_PADRAO, cota própria) e vai devagar: 1 lote por minuto, resposta
 # curta, e uma pausa antes da junção. Trocar o modelo: NINA_APRENDE_MODELO no .env do Kali.
-# Modelo SÓ do aprendizado, com cota própria (a Groq conta tokens por modelo). Não é o da Nina
-# (gpt-oss-120b). O Llama 4 Scout saiu do catálogo da Groq: em 14/10/2026 a rodada das 03:30
-# levou 404 "model_not_found" nos 30 lotes. O gpt-oss-20b a conta já usa (reserva da Nina).
-MODELO_PADRAO = 'openai/gpt-oss-20b'
+# Modelo SÓ do aprendizado, com cota própria (a Groq conta tokens por modelo, por minuto E por
+# dia). Não pode ser o da Nina (gpt-oss-120b) nem a reserva dela (gpt-oss-20b): em 14/10/2026
+# duas rodadas no 20b gastaram o teto do DIA dele (200 mil tokens) e a reserva da Nina ficou
+# sem cota. O Llama 4 Scout saiu do catálogo (404). Os modelos de texto que a conta tem são
+# gpt-oss-120b, gpt-oss-20b, gpt-oss-safeguard-20b e qwen/qwen3.8-27b: o Qwen é o único só
+# nosso. Uma noite gasta ~100 mil tokens (30 lotes de ~3,5 mil + a junção).
+MODELO_PADRAO = 'qwen/qwen3.8-27b'
 # Entre um lote e outro: a Groq conta tokens POR MINUTO. Fica abaixo de 65 s de propósito: a
 # partir de 65 s o nó Wait do n8n grava a execução como "esperando" e depende do relógio
 # interno pra voltar; abaixo disso ele espera em memória, simples. 61 s já vira o minuto.
