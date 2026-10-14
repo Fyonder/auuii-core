@@ -43,9 +43,15 @@ GROQ_CRED = {"groqApi": {"id": "gaY6xZiXOm9LALP6", "name": "Groq account"}}
 GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 BACKEND = "={{ $env.AUUII_API_URL }}/api/suporte/goby/aprender/"
 CHAVE = {"parameters": [{"name": "x-suporte-api-key", "value": "={{ $env.AUUII_API_TOKEN_GOBY }}"}]}
-# Entre uma chamada e outra da Groq: a cota de tokens por minuto é dividida com a Nina, que
-# atende gente de verdade. Madrugada é calma, mas não precisa encostar no limite.
-GROQ_INTERVALO_MS = 20000
+# COTA DA GROQ (13/10/2026, 1ª rodada): a conta está no plano grátis — o gpt-oss-120b (o modelo
+# da Nina) tem 8.000 tokens/minuto e um teto por dia, e cada lote gasta ~7 mil. 14 dos 23 lotes
+# voltaram 429 e, pior, a rodada comia a cota do DIA da Nina. Decisão do dono: o aprendizado usa
+# um modelo SÓ DELE (MODELO_PADRAO, cota própria) e vai devagar: 1 lote por minuto, resposta
+# curta, e uma pausa antes da junção. Trocar o modelo: NINA_APRENDE_MODELO no .env do Kali.
+MODELO_PADRAO = 'meta-llama/llama-4-scout-17b-16e-instruct'
+GROQ_INTERVALO_MS = 65000
+GROQ_MAX_RESPOSTA = 3000
+PAUSA_ANTES_DA_JUNCAO_S = 65
 GROQ_TIMEOUT_MS = 120000
 
 PROMPT_LOTE = """Você analisa conversas do SUPORTE HUMANO da Goby, um app de entregas (delivery). \
@@ -92,8 +98,8 @@ const num = (k, d) => { const v = Number($env[k]); return Number.isFinite(v) && 
 const INSTANCIA = $env.NINA_APRENDE_INSTANCIA || 'goby-suporte';
 const DIAS_HISTORICO = num('NINA_APRENDE_HISTORICO_DIAS', 90);
 const FATIA_DIAS = num('NINA_APRENDE_FATIA_DIAS', 5);
-const MAX_LOTES = num('NINA_APRENDE_MAX_LOTES', 40);
-const LOTE_CHARS = num('NINA_APRENDE_LOTE_CHARS', 16000);
+const MAX_LOTES = num('NINA_APRENDE_MAX_LOTES', 30);
+const LOTE_CHARS = num('NINA_APRENDE_LOTE_CHARS', 12000);
 const PAGINA = 1000;
 const NOVO_ATENDIMENTO_S = 6 * 3600;   // 6 h sem mensagem: é outro atendimento
 const TURNO_MAX = 300;                 // letras por fala (várias mensagens seguidas = uma fala)
@@ -365,6 +371,16 @@ return [{ json: corpo }];
 """
 
 
+# "Rodar agora" (13/10/2026): o `n8n execute` pela linha de comando trava com o n8n no ar, então
+# a rodada manual entra por um webhook — o MESMO segredo da entrada de teste da Nina
+# (NINA_TESTE_SEGREDO, só no .env do Kali). Sem a variável ou com header errado: não roda nada.
+SEGREDO_CONFERE = (
+    "={{ (() => { const s = String($env.NINA_TESTE_SEGREDO || ''); "
+    "const h = String(($json.headers || {})['x-nina-segredo'] || ''); "
+    "return s.length >= 16 && h === s; })() }}"
+)
+
+
 def http_backend(nome, metodo, rota, pos, corpo=None, nid=''):
     p = {
         "method": metodo,
@@ -386,12 +402,15 @@ def http_backend(nome, metodo, rota, pos, corpo=None, nid=''):
 
 
 def http_groq(nome, prompt, entrada, pos, nid):
+    # `reasoning_effort` só existe nos gpt-oss: mandado pro Llama, a Groq devolve 400.
+    modelo = "($env.NINA_APRENDE_MODELO || '" + MODELO_PADRAO + "')"
     corpo = (
-        "={{ JSON.stringify({ model: $env.NINA_APRENDE_MODELO || 'openai/gpt-oss-120b', temperature: 0.2, "
-        "reasoning_effort: $env.NINA_APRENDE_RACIOCINIO || 'medium', max_completion_tokens: 8000, "
+        "={{ JSON.stringify(Object.assign({ model: " + modelo + ", temperature: 0.2, "
+        "max_completion_tokens: " + str(GROQ_MAX_RESPOSTA) + ", "
         "response_format: { type: 'json_object' }, messages: [ { role: 'system', content: "
         + json.dumps(prompt, ensure_ascii=False)
-        + " }, { role: 'user', content: " + entrada + " } ] }) }}"
+        + " }, { role: 'user', content: " + entrada + " } ] }, "
+        + modelo + ".startsWith('openai/gpt-oss') ? { reasoning_effort: $env.NINA_APRENDE_RACIOCINIO || 'low' } : {})) }}"
     )
     return {
         "parameters": {
@@ -489,7 +508,30 @@ def montar():
         http_groq("Groq lê o lote", PROMPT_LOTE, "$json.texto", [1100, 0], base + "07"),
         codigo("Junta o que achou", JS_JUNTA, [1320, 0], base + "08"),
         se("Tem candidata?", "={{ $json.candidatas.length > 0 }}", [1540, 0], base + "09"),
+        {
+            "parameters": {"resume": "timeInterval", "amount": PAUSA_ANTES_DA_JUNCAO_S, "unit": "seconds"},
+            "name": "Respira a cota",
+            "type": "n8n-nodes-base.wait",
+            "typeVersion": 1.1,
+            "position": [1650, -100],
+            "notesInFlow": True,
+            "notes": "a Groq conta tokens por minuto: deixa o minuto virar antes da junção",
+            "webhookId": "7a1e0c3b-5d2f-4e8a-9b10-0000000000w1",
+            "id": base + "15",
+        },
         http_groq("Groq junta parecidas", PROMPT_JUNTA, "$json.pedido", [1760, -100], base + "10"),
+        {
+            "parameters": {"httpMethod": "POST", "path": "nina-aprende-rodar", "responseMode": "onReceived", "options": {}},
+            "name": "Rodar agora",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [0, 400],
+            "notesInFlow": True,
+            "notes": "POST com x-nina-segredo = NINA_TESTE_SEGREDO: roda uma vez, de verdade (com a Groq)",
+            "webhookId": "7a1e0c3b-5d2f-4e8a-9b10-0000000000w2",
+            "id": base + "16",
+        },
+        se("Segredo confere?", SEGREDO_CONFERE, [220, 400], base + "17"),
         codigo("Prepara envio", JS_PREPARA, [1980, -100], base + "11", "mín. de conversas, sem marcador, até 30"),
         http_backend("Manda sugestões", "POST", "sugestoes", [2200, -100],
                      corpo="={{ JSON.stringify({ sugestoes: $json.sugestoes }) }}", nid=base + "12"),
@@ -504,13 +546,16 @@ def montar():
     conn = {
         "Toda madrugada": c(["Estado"]),
         "Testar leitura (sem IA)": c(["Estado"]),
+        "Rodar agora": c(["Segredo confere?"]),
+        "Segredo confere?": c(["Estado"], []),
         "Estado": c(["Existentes"]),
         "Existentes": c(["Monta lotes"]),
         "Monta lotes": c(["Tem lote?"]),
         "Tem lote?": c(["Groq lê o lote"], ["Fecha a rodada"]),
         "Groq lê o lote": c(["Junta o que achou"]),
         "Junta o que achou": c(["Tem candidata?"]),
-        "Tem candidata?": c(["Groq junta parecidas"], ["Fecha a rodada"]),
+        "Tem candidata?": c(["Respira a cota"], ["Fecha a rodada"]),
+        "Respira a cota": c(["Groq junta parecidas"]),
         "Groq junta parecidas": c(["Prepara envio"]),
         "Prepara envio": c(["Manda sugestões"]),
         "Manda sugestões": c(["Fecha a rodada"]),
@@ -549,6 +594,8 @@ def conferir(f):
             assert n["parameters"]["headerParameters"] == CHAVE, n["name"]
             assert "/api/suporte/goby/aprender/" in n["parameters"]["url"], n["name"]
     # Só o que a Nina pode ensinar: o prompt de cada lote proíbe dado pessoal e valor.
+    assert [n for n in f["nodes"] if n["name"] == "Segredo confere?"][0]["parameters"]["conditions"]["conditions"][0]["leftValue"] == SEGREDO_CONFERE
+    assert f["connections"]["Segredo confere?"]["main"][1] == [], "segredo errado não pode seguir"
     for p in (PROMPT_LOTE, PROMPT_JUNTA):
         assert "valor em dinheiro" in p and "telefone" in p and "JSON" in p
         # Vai dentro de uma expressão {{ }} do n8n: chaves duplas fechariam a expressão.
