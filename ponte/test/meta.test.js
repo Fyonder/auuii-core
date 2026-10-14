@@ -33,11 +33,50 @@ test('mídia vira a chave da Evolution (a Duda pede pra escrever), legenda vai j
         { id: 'b', from: TEL, type: 'image', image: { id: 'm2', caption: 'comprovante' } },
         { id: 'c', from: TEL, type: 'sticker', sticker: { id: 'm3' } },
     ]), 'goby');
+    // O id da mídia na Meta vai junto (metaMidiaId): é por ele que a ponte baixa o arquivo
+    // pro painel. O fluxo da Nina só olha a CHAVE (audioMessage…), então nada muda lá.
     assert.deepStrictEqual(evs.map((e) => e.data.message), [
-        { audioMessage: {} },
-        { imageMessage: { caption: 'comprovante' } },
-        { stickerMessage: {} },
+        { audioMessage: { metaMidiaId: 'm1' } },
+        { imageMessage: { caption: 'comprovante', metaMidiaId: 'm2' } },
+        { stickerMessage: { metaMidiaId: 'm3' } },
     ]);
+});
+
+test('mídia da Meta leva os dados do arquivo: tipo, nome, se é áudio de voz', () => {
+    const [aud, doc] = metaParaEvolution(webhook([
+        { id: 'a', from: TEL, type: 'audio', audio: { id: 'm1', mime_type: 'audio/ogg; codecs=opus', voice: true } },
+        { id: 'd', from: TEL, type: 'document', document: { id: 'm4', mime_type: 'application/pdf', filename: 'nota.pdf', caption: 'segue' } },
+    ]), 'goby');
+    assert.deepStrictEqual(aud.data.message, { audioMessage: { mimetype: 'audio/ogg; codecs=opus', ptt: true, metaMidiaId: 'm1' } });
+    assert.deepStrictEqual(doc.data.message, { documentMessage: { caption: 'segue', mimetype: 'application/pdf', fileName: 'nota.pdf', metaMidiaId: 'm4' } });
+});
+
+test('o classificador do painel leva os dados da mídia da Meta (com o id pra ponte baixar)', () => {
+    const [ev] = metaParaEvolution(webhook([{ id: 'a', from: TEL, type: 'image', image: { id: 'm9', mime_type: 'image/jpeg' } }]), 'goby');
+    const doPainel = new Classificador().classificar(ev);
+    assert.strictEqual(doPainel.tipo, 'imagem');
+    assert.deepStrictEqual(doPainel.midia, { mime: 'image/jpeg', tamanho: null, duracao: null, nome: null, ptt: false, metaId: 'm9' });
+});
+
+test('Graph: baixar mídia — pega o link pelo id e baixa com o token', async () => {
+    const chamadas = [];
+    const fetchImpl = async (url, opts) => {
+        chamadas.push({ url, auth: opts.headers.Authorization });
+        if (url.endsWith('/m9')) return { ok: true, status: 200, json: async () => ({ url: 'https://lookaside.fbsbx.com/arquivo', mime_type: 'image/jpeg' }) };
+        return { ok: true, status: 200, headers: { get: () => null }, arrayBuffer: async () => new TextEncoder().encode('JPEG').buffer };
+    };
+    const g = new GraphMeta({ token: 'TK', phoneNumberId: '123', versao: 'v23.0', fetchImpl });
+    const r = await g.baixarMidia('m9');
+    assert.strictEqual(r.buffer.toString(), 'JPEG');
+    assert.strictEqual(r.mime, 'image/jpeg');
+    assert.deepStrictEqual(chamadas.map((c) => c.url), ['https://graph.facebook.com/v23.0/m9', 'https://lookaside.fbsbx.com/arquivo']);
+    assert.ok(chamadas.every((c) => c.auth === 'Bearer TK'));
+});
+
+test('Graph: baixar mídia — id que a Meta não conhece vira erro legível', async () => {
+    const fetchImpl = async () => ({ ok: false, status: 400, json: async () => ({ error: { message: 'Unsupported get request' } }) });
+    const g = new GraphMeta({ token: 'TK', phoneNumberId: '123', fetchImpl });
+    await assert.rejects(() => g.baixarMidia('nao-existe'), /Meta: Unsupported get request/);
 });
 
 test('botão e resposta de lista viram texto', () => {
