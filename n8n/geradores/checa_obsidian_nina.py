@@ -7,7 +7,9 @@ a nota. Este script acusa:
   - ferramenta do fluxo que não aparece no campo `ferramentas:` de nenhuma nota;
   - nota que cita ferramenta que não existe mais no fluxo;
   - nota de função que não está na tabela da nota central (Nina.md);
-  - fluxo da Nina (ex.: aviso de vaga) sem nota que cite o arquivo.
+  - fluxo da Nina (ex.: aviso de vaga) sem nota que cite o arquivo;
+  - nota fora do padrão "📣 Como explicar" (sem `publico:` ou sem o bloco de um público) e
+    guia por público desatualizado (dono, 10/10/2026; ver guias_nina.py).
 
 Uso:  python n8n/geradores/checa_obsidian_nina.py
       NINA_OBSIDIAN=<pasta> pra outro cofre. Sai com código 1 se faltar algo.
@@ -61,6 +63,15 @@ def main():
     for arq in OUTROS_FLUXOS:
         if (RAIZ / 'n8n' / 'workflows' / arq).exists() and arq not in todas and arq.replace('.json', '') not in todas:
             problemas.append(f'fluxo {arq} sem nota que o cite')
+    # Padrão "Como explicar" e os guias por público (guias_nina.py, mesma pasta).
+    import importlib.util as _iu
+    _spec = _iu.spec_from_file_location('guias_nina', Path(__file__).with_name('guias_nina.py'))
+    guias = _iu.module_from_spec(_spec)
+    _spec.loader.exec_module(guias)
+    funcoes = guias.ler_funcoes()
+    problemas += guias.problemas_do_padrao(funcoes)
+    for arq in guias.guias_desatualizados(funcoes):
+        problemas.append(f'guia "{arq}" desatualizado: rode python n8n/geradores/guias_nina.py')
     if problemas:
         print('Obsidian da Nina DESATUALIZADO:')
         for p in problemas:

@@ -2025,9 +2025,12 @@ ARQ.write_text(json.dumps(f, ensure_ascii=False, indent=2) + "\n", encoding="utf
 print(f"ok: {len(f['nodes'])} nos; tools entregador={tools_entregador}; geral={tools_geral}; loja={tools_loja}")
 print("prompt entregador:", len(ENTREGADOR), "chars; geral:", len(GERAL), "chars; loja:", len(LOJA), "chars")
 
-# Obsidian da Nina (Celebro 2/nina): toda função tem nota. Avisa se ficou pra trás.
+# Obsidian da Nina (Celebro 2/nina): toda função tem nota (com o "Como explicar" por público) e
+# os guias por público saem das notas. Remonta os guias e avisa se ficou algo pra trás.
 try:
     import importlib.util as _iu
+    _sg = _iu.spec_from_file_location("guias_nina", Path(__file__).with_name("guias_nina.py"))
+    _g = _iu.module_from_spec(_sg); _sg.loader.exec_module(_g); _g.main()
     _spec = _iu.spec_from_file_location("checa_obsidian_nina", Path(__file__).with_name("checa_obsidian_nina.py"))
     _m = _iu.module_from_spec(_spec); _spec.loader.exec_module(_m)
     if _m.main() != 0:
