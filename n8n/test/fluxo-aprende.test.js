@@ -113,6 +113,9 @@ test('modelo SÓ do aprendizado (não o da Nina), resposta curta, reasoning_effo
     assert.notEqual(corpo.model, 'openai/gpt-oss-120b', 'o 120b é o da Nina: a cota dela não é dividida');
     assert.ok(corpo.max_completion_tokens <= 3000);
     assert.equal(corpo.reasoning_effort, 'low');
+    const juncao = JSON.parse(new Function('$json', '$env', `return (${no['Groq junta parecidas'].parameters.jsonBody.replace(/^=\{\{\s*/, '').replace(/\s*\}\}$/, '')});`)({ pedido: 'x' }, {}));
+    assert.equal(juncao.reasoning_effort, 'medium', 'a junção é uma chamada por noite e decide o que chega ao gerente');
+    assert.match(no['Groq junta parecidas'].parameters.jsonBody, /Temas diferentes/);
     const llama = corpoDaGroq({ NINA_APRENDE_MODELO: 'llama-3.3-70b-versatile' });
     assert.equal(llama.model, 'llama-3.3-70b-versatile');
     assert.equal(llama.reasoning_effort, undefined, 'a Groq devolve 400 pro Llama com reasoning_effort');
@@ -318,6 +321,32 @@ test('Prepara: soma as conversas pelas candidatas citadas, corta caso isolado e 
         ] })],
     });
     assert.deepEqual(saida.json.sugestoes, [{ texto: 'Quando chegar na loja e o pedido não estiver pronto, pedir pra aguardar e avisar a loja.', tema: 'retirada', conversas: 4 }]);
+    assert.equal(saida.json.avancar, true);
+});
+
+// 14/10/2026, 1ª rodada boa: 143 candidatas viraram UMA regra de "jeito de falar"; o resto sumiu.
+test('Prepara: candidata relevante que a junção não citou vai mesmo assim, uma por tema', async () => {
+    const candidatas = [
+        { texto: 'Quando o entregador pedir pra transferir a vaga, confirmar e mandar verificar o app.', tema: 'transferência de vaga', conversas: 10 },
+        { texto: 'Quando o entregador confirmar a vaga, responder "vaga transferida".', tema: 'vagas', conversas: 7 },
+        { texto: 'A equipe responde curto e agradece.', tema: 'jeito de falar', conversas: 20 },
+        { texto: 'Quando o cliente não atender, pedir pra aguardar 10 minutos e tentar de novo.', tema: 'cliente não atende', conversas: 3 },
+        { texto: 'Quando for retirada, fazer tal coisa.', tema: 'retirada', conversas: 2 },
+        { texto: 'Quando a transferência for de outro tipo, confirmar também.', tema: 'Transferências', conversas: 4 },
+    ];
+    const [saida] = await rodar('Prepara envio', {
+        nos: { 'Junta o que achou': { candidatas, falhas: 1, lotes: 30 } },
+        input: [groq({ regras: [{ texto: 'Ao responder, seja curto, confirme a ação e agradeça.', tema: 'jeito de falar', de: [2] }] })],
+    });
+    const textos = saida.json.sugestoes.map((s) => s.texto);
+    assert.equal(textos[0], 'Ao responder, seja curto, confirme a ação e agradeça.', 'o que a junção devolveu vem primeiro (20 conversas)');
+    assert.ok(textos.includes(candidatas[0].texto), 'transferência de vaga (10) não citada: entra');
+    assert.ok(textos.includes(candidatas[1].texto), 'vagas (7): outro tema, entra');
+    assert.ok(textos.includes(candidatas[3].texto), 'cliente não atende (3 = mínimo): entra');
+    assert.ok(!textos.includes(candidatas[4].texto), 'retirada com 2 conversas: fora');
+    assert.ok(!textos.includes(candidatas[5].texto), '"Transferências" é o mesmo tema de "transferência de vaga": fica só a mais vista');
+    assert.equal(saida.json.sugestoes.length, 4);
+    assert.ok(saida.json.sugestoes.filter((s) => s.semJuncao).length === 3);
     assert.equal(saida.json.avancar, true);
 });
 
