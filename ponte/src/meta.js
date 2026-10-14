@@ -43,7 +43,15 @@ function mensagemEvolution(msg) {
             const chave = TIPOS_MIDIA[msg.type];
             if (!chave) return null; // reaction, unsupported, system...
             const corpo = msg[msg.type] || {};
-            return { [chave]: corpo.caption ? { caption: String(corpo.caption) } : {} };
+            // Os dados do arquivo vão junto, no formato da Evolution, e o id da mídia na Meta
+            // também: é por ele que a ponte baixa o arquivo pro painel (GraphMeta.baixarMidia).
+            const conteudo = {};
+            if (corpo.caption) conteudo.caption = String(corpo.caption);
+            if (corpo.mime_type) conteudo.mimetype = String(corpo.mime_type);
+            if (corpo.filename) conteudo.fileName = String(corpo.filename);
+            if (corpo.voice === true) conteudo.ptt = true;
+            if (corpo.id) conteudo.metaMidiaId = String(corpo.id);
+            return { [chave]: conteudo };
         }
     }
 }
@@ -127,6 +135,21 @@ class GraphMeta {
     async enviarTexto(numero, texto) {
         const r = await this._post({ to: digitos(numero), type: 'text', text: { body: String(texto) } });
         return r?.messages?.[0]?.id || null;
+    }
+
+    /**
+     * O ARQUIVO de uma mídia recebida, pelo id dela: a Graph devolve um link (vale alguns
+     * minutos e também pede o token) e o arquivo vem desse link.
+     */
+    async baixarMidia(id) {
+        const base = this.url.replace(/\/[^/]+\/messages$/, '');
+        const auth = { Authorization: `Bearer ${this.token}` };
+        const r1 = await this.fetch(`${base}/${encodeURIComponent(id)}`, { headers: auth, signal: AbortSignal.timeout(15000) });
+        const info = await r1.json().catch(() => ({}));
+        if (!r1.ok || !info.url) throw new Error(erroDaGraph(info, r1.status));
+        const r2 = await this.fetch(info.url, { headers: auth, signal: AbortSignal.timeout(60000) });
+        if (!r2.ok) throw new Error(`Meta: o arquivo da mídia respondeu ${r2.status}.`);
+        return { buffer: Buffer.from(await r2.arrayBuffer()), mime: info.mime_type || r2.headers.get('content-type') || null };
     }
 
     /** Marca como lida e mostra "digitando…" (a Meta só faz os dois juntos, pelo id). */

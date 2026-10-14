@@ -1,7 +1,7 @@
 // node --test test/
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { Classificador, chaveCanonica, destinoDaMensagem, participanteDoGrupo, emMs } = require('../src/normalizar');
+const { Classificador, chaveCanonica, destinoDaMensagem, participanteDoGrupo, emMs, midiaDaMensagem } = require('../src/normalizar');
 
 const SUPORTE = '557991367323';
 
@@ -145,4 +145,49 @@ test('vários números de suporte (separados por vírgula): o aviso interno pra 
     assert.equal(pro1.autor, 'sistema');
     assert.equal(pro2.autor, 'sistema');
     assert.equal(outro.autor, 'ia');
+});
+
+// ── Mídia: os DADOS do arquivo vão no evento (o arquivo sobe por fora, ver midia.js) ──
+function comMidia(chave, corpo) {
+    return msg({ extra: { message: { [chave]: corpo }, messageType: chave } });
+}
+
+test('áudio de voz: tipo, tamanho (vem em texto), duração e marca de voz', () => {
+    const ev = new Classificador().classificar(upsert(comMidia('audioMessage', { mimetype: 'audio/ogg; codecs=opus', fileLength: '12345', seconds: 7, ptt: true })));
+    assert.equal(ev.tipo, 'audio');
+    assert.deepEqual(ev.midia, { mime: 'audio/ogg', tamanho: 12345, duracao: 7, nome: null, ptt: true, metaId: null });
+});
+
+test('foto com legenda: a legenda segue no texto, o arquivo vira midia', () => {
+    const ev = new Classificador().classificar(upsert(comMidia('imageMessage', { mimetype: 'image/jpeg', caption: 'comprovante', fileLength: { low: 2048, high: 0 } })));
+    assert.equal(ev.texto, 'comprovante');
+    assert.deepEqual(ev.midia, { mime: 'image/jpeg', tamanho: 2048, duracao: null, nome: null, ptt: false, metaId: null });
+});
+
+test('documento com legenda (vem embrulhado) e figurinha também têm arquivo', () => {
+    const doc = midiaDaMensagem({ messageType: 'documentWithCaptionMessage', message: { documentWithCaptionMessage: { message: { documentMessage: { mimetype: 'application/pdf', fileName: 'nota.pdf', caption: 'segue' } } } } });
+    assert.equal(doc.nome, 'nota.pdf');
+    assert.equal(doc.mime, 'application/pdf');
+    assert.equal(midiaDaMensagem({ message: { stickerMessage: { mimetype: 'image/webp' } } }).mime, 'image/webp');
+});
+
+test('texto, localização e contato NÃO têm arquivo', () => {
+    assert.equal(new Classificador().classificar(upsert(msg())).midia, undefined);
+    assert.equal(midiaDaMensagem({ message: { locationMessage: { degreesLatitude: -23 } } }), null);
+    assert.equal(midiaDaMensagem({ message: { contactMessage: { displayName: 'Zé' } } }), null);
+});
+
+test('dados tortos não quebram: tamanho e duração inválidos viram null, nome gigante é cortado', () => {
+    const m = midiaDaMensagem({ message: { documentMessage: { mimetype: 42, fileLength: 'abc', seconds: -3, fileName: 'x'.repeat(500) } } });
+    assert.equal(m.mime, null);
+    assert.equal(m.tamanho, null);
+    assert.equal(m.duracao, null);
+    assert.equal(m.nome.length, 200);
+    assert.equal(midiaDaMensagem(null), null);
+    assert.equal(midiaDaMensagem({}), null);
+});
+
+test('o base64 que a Evolution põe no webhook não é confundido com o tipo da mensagem', () => {
+    const m = midiaDaMensagem({ message: { base64: 'AAAA', imageMessage: { mimetype: 'image/png' } } });
+    assert.equal(m.mime, 'image/png');
 });

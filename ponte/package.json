@@ -6,7 +6,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test test/normalizar.test.js test/meta.test.js test/nina.test.js"
+    "test": "node --test test/normalizar.test.js test/meta.test.js test/nina.test.js test/midia.test.js"
   },
   "engines": {
     "node": ">=22"

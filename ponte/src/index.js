@@ -24,6 +24,7 @@ const path = require('path');
 const { io } = require('socket.io-client');
 const { Classificador, chaveCanonica } = require('./normalizar');
 const { metaParaEvolution, eventoDeEnvio, GraphMeta } = require('./meta');
+const midia = require('./midia');
 const { version: VERSAO } = require('../package.json');
 
 const cfg = {
@@ -56,6 +57,20 @@ const cfg = {
 
 function log(...partes) {
     console.log(new Date().toISOString(), ...partes);
+}
+
+/**
+ * O ARQUIVO de uma mensagem com mídia vai pro backend por fora da fila (ver midia.js). Não
+ * espera nem segura nada: a mensagem já foi pela fila; o arquivo é um extra pro painel.
+ */
+function mandarArquivo(ev, obter) {
+    if (!ev?.midia || !cfg.backend || !cfg.chave) return;
+    midia.levarMidia({
+        ev,
+        obter,
+        subir: (a) => midia.subirProBackend({ backend: cfg.backend, chave: cfg.chave, ev, buffer: a.buffer, mime: a.mime }),
+        log,
+    }).then((r) => { if (r.ok) log(`📎 arquivo de ${ev.id} (${ev.tipo}) no painel`); }).catch(() => {});
 }
 
 const faltando = [
@@ -333,6 +348,8 @@ async function receberDaMeta(corpo) {
         // Painel: o backend descarta id repetido, então reenvio da Meta não duplica lá.
         const doPainel = classificador.classificar(ev);
         if (doPainel) { ultimaMensagemEm = Date.now(); enfileirar('evento', doPainel); lembrarCanal(doPainel.telefone || doPainel.jid, 'meta'); }
+        // Foto/áudio da Meta: o arquivo é baixado da Graph pelo id da mídia.
+        if (doPainel?.midia?.metaId) mandarArquivo(doPainel, () => graph.baixarMidia(doPainel.midia.metaId));
         if (jaEntregue(id)) continue;
         try {
             const resp = await fetch(cfg.n8nWebhook, {
@@ -491,6 +508,14 @@ const servidor = http.createServer(async (req, res) => {
         if (ev.autor === 'contato' && body.instance === cfg.evolutionDaMeta) lembrarCanal(ev.telefone || ev.jid, 'evolution');
         ultimaMensagemEm = Date.now();
         enfileirar('evento', ev);
+        // Foto/áudio: o arquivo vem no webhook (se a Evolution manda base64) ou é pedido a
+        // ela — pela instância com o nome DA EVOLUTION, não o da Meta.
+        if (ev.midia) {
+            const doWebhook = midia.arquivoDoWebhook(e.data);
+            mandarArquivo(ev, async () => (doWebhook
+                ? { buffer: doWebhook, mime: ev.midia.mime }
+                : midia.baixarDaEvolution({ evolutionUrl: cfg.evolutionUrl, evolutionKey: cfg.evolutionKey, instancia: body.instance, key: e.data?.key })));
+        }
     }
 });
 

@@ -115,6 +115,38 @@ function tipoETexto(data) {
     return { tipo: TIPOS[chave] || 'outro', texto: String(texto || '').slice(0, 4096) };
 }
 
+// Tipos que têm ARQUIVO: o painel mostra a foto, toca o áudio, abre o documento (dono,
+// 13/10/2026: "dentro do painel dá pra mostrar os dados em imagens, ou os áudios também?").
+const TIPOS_COM_ARQUIVO = new Set(['imagem', 'audio', 'video', 'documento', 'figurinha']);
+
+/**
+ * Os DADOS do arquivo da mensagem (não o arquivo): tipo, tamanho, duração, nome. O arquivo
+ * em si sobe pro backend por fora da fila (midia.js) — base64 de áudio e vídeo na fila
+ * passaria do tamanho que o socket aceita e travaria as mensagens atrás dele.
+ * `metaId`: o id da mídia na Meta (o arquivo é baixado da Graph API por ele).
+ */
+function midiaDaMensagem(data) {
+    const msg = data?.message || {};
+    const chave = data?.messageType && msg[data.messageType] !== undefined
+        ? data.messageType
+        : Object.keys(msg).find((k) => !IGNORADOS.has(k) && k !== 'messageContextInfo' && k !== 'base64');
+    if (!chave || !TIPOS_COM_ARQUIVO.has(TIPOS[chave])) return null;
+    let corpo = msg[chave] || {};
+    if (chave === 'documentWithCaptionMessage') corpo = corpo.message?.documentMessage || {};
+    const numero = (v) => {
+        const n = Number(v?.low ?? v);
+        return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    return {
+        mime: typeof corpo.mimetype === 'string' ? corpo.mimetype.split(';')[0].trim().slice(0, 100) : null,
+        tamanho: numero(corpo.fileLength),
+        duracao: numero(corpo.seconds),
+        nome: corpo.fileName ? String(corpo.fileName).slice(0, 200) : null,
+        ptt: corpo.ptt === true || chave === 'pttMessage',
+        metaId: corpo.metaMidiaId ? String(corpo.metaMidiaId) : null,
+    };
+}
+
 function emMs(ts) {
     if (ts == null) return Date.now();
     const n = typeof ts === 'object' ? Number(ts.low ?? ts.toString?.()) : Number(ts);
@@ -181,6 +213,9 @@ class Classificador {
             tipo: conteudo.tipo,
             em: emMs(data.messageTimestamp),
         };
+        // `midia.metaId` só serve à ponte (baixar da Meta); o backend guarda só o que conhece.
+        const midia = midiaDaMensagem(data);
+        if (midia) base.midia = midia;
         if (destino.grupo) {
             base.grupo = { jid: destino.jid };
             base.participante = participanteDoGrupo(data);
@@ -212,4 +247,4 @@ class Classificador {
     }
 }
 
-module.exports = { Classificador, chaveCanonica, destinoDaMensagem, participanteDoGrupo, tipoETexto, emMs, nomeDoEvento };
+module.exports = { Classificador, chaveCanonica, destinoDaMensagem, participanteDoGrupo, tipoETexto, midiaDaMensagem, emMs, nomeDoEvento, TIPOS_COM_ARQUIVO };
