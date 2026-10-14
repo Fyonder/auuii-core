@@ -67,8 +67,17 @@ test('estrutura: os dois gatilhos levam ao Estado; Groq com a credencial e um lo
     assert.deepEqual(destinos('Toda madrugada'), ['Estado']);
     assert.deepEqual(destinos('Testar leitura (sem IA)'), ['Estado']);
     assert.equal(no['Toda madrugada'].parameters.rule.interval[0].expression, '30 3 * * *');
-    assert.deepEqual(destinos('Tem lote?', 0), ['Groq lê o lote']);
+    // Um lote por minuto é um LAÇO (Loop → Groq → espera → Loop), não o "batching" do nó HTTP:
+    // com batching o nó começava e nunca terminava (14/10/2026, n8n 2.39, duas rodadas).
+    assert.deepEqual(destinos('Tem lote?', 0), ['Um lote por vez']);
     assert.deepEqual(destinos('Tem lote?', 1), ['Fecha a rodada']);
+    assert.equal(no['Um lote por vez'].type, 'n8n-nodes-base.splitInBatches');
+    assert.equal(no['Um lote por vez'].parameters.batchSize, 1);
+    assert.deepEqual(destinos('Um lote por vez', 0), ['Junta o que achou'], 'acabou: todas as respostas juntas');
+    assert.deepEqual(destinos('Um lote por vez', 1), ['Groq lê o lote'], 'o lote da vez');
+    assert.deepEqual(destinos('Groq lê o lote'), ['Espera a cota']);
+    assert.deepEqual(destinos('Espera a cota'), ['Um lote por vez']);
+    assert.ok(no['Espera a cota'].parameters.amount >= 60 && no['Espera a cota'].parameters.amount < 65, 'vira o minuto, mas espera em memória (< 65 s)');
     assert.deepEqual(destinos('Tem candidata?', 0), ['Respira a cota'], 'pausa antes da junção');
     assert.deepEqual(destinos('Respira a cota'), ['Groq junta parecidas']);
     assert.ok(no['Respira a cota'].parameters.amount >= 60, 'deixa o minuto da Groq virar');
@@ -79,9 +88,7 @@ test('estrutura: os dois gatilhos levam ao Estado; Groq com a credencial e um lo
         const p = no[nome].parameters;
         assert.equal(p.nodeCredentialType, 'groqApi');
         assert.equal(no[nome].credentials.groqApi.name, 'Groq account');
-        assert.equal(p.options.batching.batch.batchSize, 1);
-        // Plano grátis da Groq: ~8 mil tokens/minuto por modelo; cada lote gasta ~5-7 mil.
-        assert.ok(p.options.batching.batch.batchInterval >= 60000, 'no máximo 1 lote por minuto');
+        assert.equal(p.options.batching, undefined, 'sem batching do nó HTTP: ele trava');
         assert.equal(no[nome].onError, 'continueRegularOutput');
         assert.match(p.jsonBody, /json_object/);
     }
