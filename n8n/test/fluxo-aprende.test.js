@@ -106,15 +106,16 @@ const corpoDaGroq = (env = {}) => {
     return JSON.parse(new Function('$json', '$env', `return (${expr});`)({ texto: 'Conversa 1:\nM: oi\nS: oi' }, env));
 };
 
-test('modelo SÓ do aprendizado (não o da Nina), resposta curta, sem reasoning_effort no Llama', () => {
+test('modelo SÓ do aprendizado (não o da Nina), resposta curta, reasoning_effort só nos gpt-oss', () => {
     const corpo = corpoDaGroq();
-    assert.match(corpo.model, /llama-4-scout/);
+    // 14/10/2026: o Llama 4 Scout saiu do catálogo da Groq (404 model_not_found nos 30 lotes).
+    assert.equal(corpo.model, 'openai/gpt-oss-20b');
     assert.notEqual(corpo.model, 'openai/gpt-oss-120b', 'o 120b é o da Nina: a cota dela não é dividida');
     assert.ok(corpo.max_completion_tokens <= 3000);
-    assert.equal(corpo.reasoning_effort, undefined, 'a Groq devolve 400 pro Llama com reasoning_effort');
-    const gpt = corpoDaGroq({ NINA_APRENDE_MODELO: 'openai/gpt-oss-20b' });
-    assert.equal(gpt.model, 'openai/gpt-oss-20b');
-    assert.equal(gpt.reasoning_effort, 'low');
+    assert.equal(corpo.reasoning_effort, 'low');
+    const llama = corpoDaGroq({ NINA_APRENDE_MODELO: 'llama-3.3-70b-versatile' });
+    assert.equal(llama.model, 'llama-3.3-70b-versatile');
+    assert.equal(llama.reasoning_effort, undefined, 'a Groq devolve 400 pro Llama com reasoning_effort');
 });
 
 test('"Rodar agora" só roda com o segredo; sem ele, para no portão', () => {
