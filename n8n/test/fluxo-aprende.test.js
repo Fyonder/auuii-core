@@ -112,7 +112,7 @@ test('modelo SÓ do aprendizado (não o da Nina), resposta curta, reasoning_effo
     // Nina e tem teto por DIA (200 mil) que duas rodadas esgotaram. Fica o Qwen, só nosso.
     assert.equal(corpo.model, 'qwen/qwen3.8-27b');
     assert.ok(!/gpt-oss/.test(corpo.model), 'os gpt-oss são da Nina (120b) e da reserva dela (20b): cota por dia dividida');
-    assert.ok(corpo.max_completion_tokens <= 3000);
+    assert.ok(corpo.max_completion_tokens <= 1000, 'plano grátis: tokens de saída por minuto (Qwen: 1000) — acima disso a Groq recusa o pedido inteiro');
     assert.equal(corpo.reasoning_effort, undefined, 'reasoning_effort só existe nos gpt-oss');
     const gpt = corpoDaGroq({ NINA_APRENDE_MODELO: 'openai/gpt-oss-20b' });
     assert.equal(gpt.reasoning_effort, 'low');
@@ -353,11 +353,17 @@ test('Prepara: candidata relevante que a junção não citou vai mesmo assim, um
     assert.equal(saida.json.avancar, true);
 });
 
-test('Prepara: junção falhou ou metade dos lotes com erro → não avança', async () => {
-    const junta = { candidatas: [{ texto: 'a', conversas: 5 }], falhas: 0, lotes: 2 };
-    const [ruim] = await rodar('Prepara envio', { nos: { 'Junta o que achou': junta }, input: [{ error: { message: 'timeout' } }] });
-    assert.equal(ruim.json.avancar, false);
-    assert.deepEqual(ruim.json.sugestoes, []);
+test('Prepara: junção falhou → candidatas vão sem junção e a noite anda; metade dos lotes com erro → não anda', async () => {
+    const junta = { candidatas: [
+        { texto: 'Quando o entregador pedir pra transferir a vaga, confirmar e mandar verificar o app.', tema: 'transferência', conversas: 5 },
+        { texto: 'Quando faltar código, pedir o número do pedido e a loja.', tema: 'código', conversas: 3 },
+        { texto: 'Quando for caso raro, fazer tal coisa.', tema: 'raro', conversas: 1 },
+    ], falhas: 0, lotes: 2 };
+    // 14/10/2026: a junção caiu por cota três noites seguidas e a mesma fatia era relida pra sempre.
+    const [semJuncao] = await rodar('Prepara envio', { nos: { 'Junta o que achou': junta }, input: [{ error: { message: 'OTPM' } }] });
+    assert.equal(semJuncao.json.avancar, true, 'a leitura rendeu: anda');
+    assert.deepEqual(semJuncao.json.sugestoes.map((s) => s.texto), [junta.candidatas[0].texto, junta.candidatas[1].texto]);
+    assert.ok(semJuncao.json.sugestoes.every((s) => s.semJuncao));
     const [metade] = await rodar('Prepara envio', { nos: { 'Junta o que achou': { ...junta, falhas: 2, lotes: 3 } }, input: [groq({ regras: [] })] });
     assert.equal(metade.json.avancar, false);
 });

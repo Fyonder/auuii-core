@@ -59,7 +59,11 @@ MODELO_PADRAO = 'qwen/qwen3.8-27b'
 # partir de 65 s o nó Wait do n8n grava a execução como "esperando" e depende do relógio
 # interno pra voltar; abaixo disso ele espera em memória, simples. 61 s já vira o minuto.
 GROQ_INTERVALO_S = 61
-GROQ_MAX_RESPOSTA = 3000
+# Resposta curta de propósito: o plano grátis da Groq limita TOKENS DE SAÍDA por minuto (no
+# Qwen, 1000) e recusa de cara ("Request too large… OTPM") qualquer pedido com
+# max_completion_tokens acima disso — foi o que derrubou 3 lotes e a junção em 14/10. Um lote
+# devolve ~10 regras (≈ 500 tokens); a junção, até 25 (≈ 900).
+GROQ_MAX_RESPOSTA = 1000
 PAUSA_ANTES_DA_JUNCAO_S = 65
 GROQ_TIMEOUT_MS = 120000
 
@@ -98,7 +102,7 @@ telefone, valor em dinheiro, placa, endereço, número de pedido ou nome de loja
 4. Do jeito de falar (tema "jeito de falar"), no máximo 2 regras, começando com "Ao responder".
 5. Descarte o que for caso isolado, confuso, contraditório entre as candidatas, ou que prometa valor, prazo ou \
 política que a equipe não deixou claro.
-6. No máximo 30 regras, as mais úteis primeiro.
+6. No máximo 25 regras, as mais úteis primeiro.
 
 Responda SÓ JSON: {"regras":[{"texto":"...","tema":"...","de":[0,3,7]}]}. Nada pra ensinar: {"regras":[]}."""
 
@@ -319,13 +323,16 @@ respostas.forEach((it, i) => {
 });
 candidatas.sort((a, b) => b.conversas - a.conversas);
 const top = candidatas.slice(0, 200);
+// Pra Groq só as 60 mais vistas (a resposta cabe em 1000 tokens); as outras ficam em `candidatas`
+// e entram pela rede de segurança do "Prepara envio" se tiverem conversas o bastante.
+const listadas = top.slice(0, 60);
 const conhecidos = (($('Existentes').first().json || {}).conhecidos || []).slice(0, 100).map((t) => String(t).slice(0, 160));
 const pedido = [
   'JÁ SABE:',
   conhecidos.length ? conhecidos.map((t) => `- ${t}`).join('\n') : '(nada ainda)',
   '',
   'CANDIDATAS:',
-  top.map((c, i) => `${i}. [${c.tema || 'sem tema'}] ${c.texto} (${c.conversas} conversas)`).join('\n'),
+  listadas.map((c, i) => `${i}. [${c.tema || 'sem tema'}] ${c.texto} (${c.conversas} conversas)`).join('\n'),
 ].join('\n');
 return [{ json: { candidatas: top, falhas, lotes: respostas.length, pedido } }];
 """
@@ -355,12 +362,14 @@ for (const r of consolidou ? j.regras : []) {
 // Rede de segurança (14/10/2026: a Groq juntou 143 candidatas numa regra só de "jeito de falar"
 // e descartou o resto): candidata com conversas o bastante que a junção NÃO citou vai mesmo
 // assim, uma por tema (a mais vista) — fora "jeito de falar", que a junção já resume.
+// Junção falhou (cota, timeout): as candidatas vão SEM junção, uma por tema, e a noite anda
+// mesmo assim (14/10/2026: três noites seguidas sem junção relendo a mesma fatia).
 const citadas = new Set();
 for (const r of consolidou ? j.regras : []) for (const i of Array.isArray(r.de) ? r.de : []) citadas.add(Number(i));
 const temaChave = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/[^a-z ]/g, ' ').trim().split(/\s+/)[0].replace(/s$/, '');
 const porTema = new Map();
-if (consolidou) {
+{
   junta.candidatas.forEach((c, i) => {
     const texto = String((c && c.texto) || '').replace(/\s+/g, ' ').trim().slice(0, 500);
     const tema = String((c && c.tema) || '').slice(0, 40);
@@ -372,8 +381,9 @@ if (consolidou) {
   });
 }
 const sugestoes = [...porTexto.values(), ...porTema.values()].sort((a, b) => b.conversas - a.conversas).slice(0, 30);
-// Avança o marcador só se a noite rendeu: junção ok e no máximo metade dos lotes com erro.
-const avancar = consolidou && junta.falhas <= junta.lotes / 2;
+// Avança o marcador se a leitura rendeu: no máximo metade dos lotes com erro. A junção
+// falhar não segura mais a noite (as candidatas foram sem junção).
+const avancar = junta.falhas <= junta.lotes / 2;
 return [{ json: { sugestoes, avancar, falhas: junta.falhas, candidatas: junta.candidatas.length } }];
 """
 
