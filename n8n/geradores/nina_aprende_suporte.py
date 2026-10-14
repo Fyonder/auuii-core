@@ -48,8 +48,14 @@ CHAVE = {"parameters": [{"name": "x-suporte-api-key", "value": "={{ $env.AUUII_A
 # voltaram 429 e, pior, a rodada comia a cota do DIA da Nina. Decisão do dono: o aprendizado usa
 # um modelo SÓ DELE (MODELO_PADRAO, cota própria) e vai devagar: 1 lote por minuto, resposta
 # curta, e uma pausa antes da junção. Trocar o modelo: NINA_APRENDE_MODELO no .env do Kali.
-MODELO_PADRAO = 'meta-llama/llama-4-scout-17b-16e-instruct'
-GROQ_INTERVALO_MS = 65000
+# Modelo SÓ do aprendizado, com cota própria (a Groq conta tokens por modelo). Não é o da Nina
+# (gpt-oss-120b). O Llama 4 Scout saiu do catálogo da Groq: em 14/10/2026 a rodada das 03:30
+# levou 404 "model_not_found" nos 30 lotes. O gpt-oss-20b a conta já usa (reserva da Nina).
+MODELO_PADRAO = 'openai/gpt-oss-20b'
+# Entre um lote e outro: a Groq conta tokens POR MINUTO. Fica abaixo de 65 s de propósito: a
+# partir de 65 s o nó Wait do n8n grava a execução como "esperando" e depende do relógio
+# interno pra voltar; abaixo disso ele espera em memória, simples. 61 s já vira o minuto.
+GROQ_INTERVALO_S = 61
 GROQ_MAX_RESPOSTA = 3000
 PAUSA_ANTES_DA_JUNCAO_S = 65
 GROQ_TIMEOUT_MS = 120000
@@ -421,10 +427,10 @@ def http_groq(nome, prompt, entrada, pos, nid):
             "sendBody": True,
             "specifyBody": "json",
             "jsonBody": corpo,
-            "options": {
-                "timeout": GROQ_TIMEOUT_MS,
-                "batching": {"batch": {"batchSize": 1, "batchInterval": GROQ_INTERVALO_MS}},
-            },
+            # SEM "batching" do nó HTTP: em 14/10/2026 (n8n 2.39) o nó com batching de 1 a cada
+            # 65 s começou e NUNCA terminou (duas rodadas, 80 e 50 min, sem conexão aberta, CPU
+            # zero). O ritmo de 1 lote por minuto é o laço "Um lote por vez" + "Espera a cota".
+            "options": {"timeout": GROQ_TIMEOUT_MS},
         },
         "name": nome,
         "type": "n8n-nodes-base.httpRequest",
@@ -505,7 +511,31 @@ def montar():
         http_backend("Existentes", "GET", "existentes", [440, 100], nid=base + "04"),
         codigo("Monta lotes", JS_MONTA, [660, 100], base + "05", "lê a Evolution, limpa dado pessoal, monta lotes"),
         se("Tem lote?", "={{ !!$json.texto }}", [880, 100], base + "06"),
-        http_groq("Groq lê o lote", PROMPT_LOTE, "$json.texto", [1100, 0], base + "07"),
+        # Um lote por vez: Loop Over Items (saída 0 = acabou, saída 1 = o lote da vez). Cada
+        # volta passa pela Groq e espera o minuto virar; no fim, "acabou" entrega todas as
+        # respostas juntas pro "Junta o que achou", na ordem dos lotes.
+        {
+            "parameters": {"batchSize": 1, "options": {}},
+            "name": "Um lote por vez",
+            "type": "n8n-nodes-base.splitInBatches",
+            "typeVersion": 3,
+            "position": [1100, 100],
+            "notesInFlow": True,
+            "notes": "1 lote por minuto: Groq → espera → volta",
+            "id": base + "18",
+        },
+        http_groq("Groq lê o lote", PROMPT_LOTE, "$json.texto", [1320, 260], base + "07"),
+        {
+            "parameters": {"resume": "timeInterval", "amount": GROQ_INTERVALO_S, "unit": "seconds"},
+            "name": "Espera a cota",
+            "type": "n8n-nodes-base.wait",
+            "typeVersion": 1.1,
+            "position": [1540, 260],
+            "notesInFlow": True,
+            "notes": "deixa o minuto da Groq virar antes do próximo lote",
+            "webhookId": "7a1e0c3b-5d2f-4e8a-9b10-0000000000w3",
+            "id": base + "19",
+        },
         codigo("Junta o que achou", JS_JUNTA, [1320, 0], base + "08"),
         se("Tem candidata?", "={{ $json.candidatas.length > 0 }}", [1540, 0], base + "09"),
         {
@@ -551,8 +581,10 @@ def montar():
         "Estado": c(["Existentes"]),
         "Existentes": c(["Monta lotes"]),
         "Monta lotes": c(["Tem lote?"]),
-        "Tem lote?": c(["Groq lê o lote"], ["Fecha a rodada"]),
-        "Groq lê o lote": c(["Junta o que achou"]),
+        "Tem lote?": c(["Um lote por vez"], ["Fecha a rodada"]),
+        "Um lote por vez": c(["Junta o que achou"], ["Groq lê o lote"]),
+        "Groq lê o lote": c(["Espera a cota"]),
+        "Espera a cota": c(["Um lote por vez"]),
         "Junta o que achou": c(["Tem candidata?"]),
         "Tem candidata?": c(["Respira a cota"], ["Fecha a rodada"]),
         "Respira a cota": c(["Groq junta parecidas"]),
@@ -589,10 +621,17 @@ def conferir(f):
     for n in f["nodes"]:
         if n["name"].startswith("Groq"):
             assert n["credentials"] == GROQ_CRED and n["parameters"]["nodeCredentialType"] == "groqApi"
-            assert n["parameters"]["options"]["batching"]["batch"]["batchSize"] == 1
+            assert "batching" not in n["parameters"]["options"], "batching do nó HTTP trava (14/10/2026)"
         if n["type"] == "n8n-nodes-base.httpRequest" and not n["name"].startswith("Groq"):
             assert n["parameters"]["headerParameters"] == CHAVE, n["name"]
             assert "/api/suporte/goby/aprender/" in n["parameters"]["url"], n["name"]
+    # O ritmo da Groq é o laço: Loop → Groq → Espera → Loop; "acabou" vai pra junção.
+    assert f["connections"]["Um lote por vez"]["main"][0][0]["node"] == "Junta o que achou"
+    assert f["connections"]["Um lote por vez"]["main"][1][0]["node"] == "Groq lê o lote"
+    assert f["connections"]["Groq lê o lote"]["main"][0][0]["node"] == "Espera a cota"
+    assert f["connections"]["Espera a cota"]["main"][0][0]["node"] == "Um lote por vez"
+    espera = [n for n in f["nodes"] if n["name"] == "Espera a cota"][0]["parameters"]
+    assert 60 <= espera["amount"] < 65 and espera["unit"] == "seconds"
     # Só o que a Nina pode ensinar: o prompt de cada lote proíbe dado pessoal e valor.
     assert [n for n in f["nodes"] if n["name"] == "Segredo confere?"][0]["parameters"]["conditions"]["conditions"][0]["leftValue"] == SEGREDO_CONFERE
     assert f["connections"]["Segredo confere?"]["main"][1] == [], "segredo errado não pode seguir"

@@ -67,8 +67,17 @@ test('estrutura: os dois gatilhos levam ao Estado; Groq com a credencial e um lo
     assert.deepEqual(destinos('Toda madrugada'), ['Estado']);
     assert.deepEqual(destinos('Testar leitura (sem IA)'), ['Estado']);
     assert.equal(no['Toda madrugada'].parameters.rule.interval[0].expression, '30 3 * * *');
-    assert.deepEqual(destinos('Tem lote?', 0), ['Groq lê o lote']);
+    // Um lote por minuto é um LAÇO (Loop → Groq → espera → Loop), não o "batching" do nó HTTP:
+    // com batching o nó começava e nunca terminava (14/10/2026, n8n 2.39, duas rodadas).
+    assert.deepEqual(destinos('Tem lote?', 0), ['Um lote por vez']);
     assert.deepEqual(destinos('Tem lote?', 1), ['Fecha a rodada']);
+    assert.equal(no['Um lote por vez'].type, 'n8n-nodes-base.splitInBatches');
+    assert.equal(no['Um lote por vez'].parameters.batchSize, 1);
+    assert.deepEqual(destinos('Um lote por vez', 0), ['Junta o que achou'], 'acabou: todas as respostas juntas');
+    assert.deepEqual(destinos('Um lote por vez', 1), ['Groq lê o lote'], 'o lote da vez');
+    assert.deepEqual(destinos('Groq lê o lote'), ['Espera a cota']);
+    assert.deepEqual(destinos('Espera a cota'), ['Um lote por vez']);
+    assert.ok(no['Espera a cota'].parameters.amount >= 60 && no['Espera a cota'].parameters.amount < 65, 'vira o minuto, mas espera em memória (< 65 s)');
     assert.deepEqual(destinos('Tem candidata?', 0), ['Respira a cota'], 'pausa antes da junção');
     assert.deepEqual(destinos('Respira a cota'), ['Groq junta parecidas']);
     assert.ok(no['Respira a cota'].parameters.amount >= 60, 'deixa o minuto da Groq virar');
@@ -79,9 +88,7 @@ test('estrutura: os dois gatilhos levam ao Estado; Groq com a credencial e um lo
         const p = no[nome].parameters;
         assert.equal(p.nodeCredentialType, 'groqApi');
         assert.equal(no[nome].credentials.groqApi.name, 'Groq account');
-        assert.equal(p.options.batching.batch.batchSize, 1);
-        // Plano grátis da Groq: ~8 mil tokens/minuto por modelo; cada lote gasta ~5-7 mil.
-        assert.ok(p.options.batching.batch.batchInterval >= 60000, 'no máximo 1 lote por minuto');
+        assert.equal(p.options.batching, undefined, 'sem batching do nó HTTP: ele trava');
         assert.equal(no[nome].onError, 'continueRegularOutput');
         assert.match(p.jsonBody, /json_object/);
     }
@@ -99,15 +106,16 @@ const corpoDaGroq = (env = {}) => {
     return JSON.parse(new Function('$json', '$env', `return (${expr});`)({ texto: 'Conversa 1:\nM: oi\nS: oi' }, env));
 };
 
-test('modelo SÓ do aprendizado (não o da Nina), resposta curta, sem reasoning_effort no Llama', () => {
+test('modelo SÓ do aprendizado (não o da Nina), resposta curta, reasoning_effort só nos gpt-oss', () => {
     const corpo = corpoDaGroq();
-    assert.match(corpo.model, /llama-4-scout/);
+    // 14/10/2026: o Llama 4 Scout saiu do catálogo da Groq (404 model_not_found nos 30 lotes).
+    assert.equal(corpo.model, 'openai/gpt-oss-20b');
     assert.notEqual(corpo.model, 'openai/gpt-oss-120b', 'o 120b é o da Nina: a cota dela não é dividida');
     assert.ok(corpo.max_completion_tokens <= 3000);
-    assert.equal(corpo.reasoning_effort, undefined, 'a Groq devolve 400 pro Llama com reasoning_effort');
-    const gpt = corpoDaGroq({ NINA_APRENDE_MODELO: 'openai/gpt-oss-20b' });
-    assert.equal(gpt.model, 'openai/gpt-oss-20b');
-    assert.equal(gpt.reasoning_effort, 'low');
+    assert.equal(corpo.reasoning_effort, 'low');
+    const llama = corpoDaGroq({ NINA_APRENDE_MODELO: 'llama-3.3-70b-versatile' });
+    assert.equal(llama.model, 'llama-3.3-70b-versatile');
+    assert.equal(llama.reasoning_effort, undefined, 'a Groq devolve 400 pro Llama com reasoning_effort');
 });
 
 test('"Rodar agora" só roda com o segredo; sem ele, para no portão', () => {
