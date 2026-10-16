@@ -39,12 +39,22 @@ test('estrutura: a cada 15 min → Automações → É hora? → Resumo → Uma 
     assert.equal(fluxo.active, false);
 });
 
-test('É hora?: desligado, sem destinatário ou horário inválido → nada', async () => {
-    const env = { RESUMO_AGORA: AS('21:37') };
+test('É hora?: desligado, sem destinatário em lugar nenhum ou horário inválido → nada', async () => {
+    const env = { RESUMO_AGORA: AS('21:37'), SUPORTE_WHATSAPP: '' };
     assert.deepEqual(await rodar('É hora?', { env, input: [cfg({ ligado: false })] }), []);
     assert.deepEqual(await rodar('É hora?', { env, input: [cfg({ destinatarios: [] })] }), []);
     assert.deepEqual(await rodar('É hora?', { env, input: [cfg({ destinatarios: [{ nome: 'x', telefone: '999' }] })] }), [], 'telefone sem país/DDD não vale');
     assert.deepEqual(await rodar('É hora?', { env, input: [cfg({ horario: '9h' })] }), []);
+});
+
+// Dono (16/10/2026): "os números já vêm do servidor: o meu, o do meu sócio e o do suporte".
+test('É hora?: sem destinatário no painel, vai pros 2 primeiros de SUPORTE_WHATSAPP (dono e sócio, não o número do suporte)', async () => {
+    const env = { RESUMO_AGORA: AS('21:37'), SUPORTE_WHATSAPP: '5579900000001, 5544900000002,5544900000003' };
+    const [r] = await rodar('É hora?', { env, input: [cfg({ destinatarios: [] })], memoria: {} });
+    assert.deepEqual(r.json.destinatarios, [{ nome: 'dono', telefone: '5579900000001' }, { nome: 'sócio', telefone: '5544900000002' }]);
+    // Com destinatário no painel, ele manda; o servidor fica de reserva.
+    const [p] = await rodar('É hora?', { env, input: [cfg()], memoria: {} });
+    assert.deepEqual(p.json.destinatarios.map((d) => d.telefone), ['5544999990001', '5544999990002']);
 });
 
 test('É hora?: dentro da janela de 15 min manda uma vez por dia; fora da janela, não', async () => {

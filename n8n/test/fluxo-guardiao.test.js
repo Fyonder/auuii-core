@@ -117,9 +117,13 @@ test('Compara: caiu o número do suporte → manda pelo da Nina; os dois → nã
     assert.match(n.json.motivo, /os dois números/);
 });
 
-test('Compara: sem DONO_WHATSAPP no .env → registra, mas não manda', async () => {
-    const [m] = await rodar('Compara', { env: { ...ENV, DONO_WHATSAPP: '' }, input: [{ em: T0, pecas: pecas({ 'Ponte (PC → painel)': 'fora' }) }], memoria: {} });
-    assert.equal(m.json.semDestino, true);
-    assert.match(m.json.motivo, /DONO_WHATSAPP/);
-    assert.equal(m.json.telefone, undefined);
+// Dono (16/10/2026): "os números já vêm do servidor: o meu, o do meu sócio e o do suporte".
+test('Compara: sem DONO_WHATSAPP, vai pro 1º de SUPORTE_WHATSAPP (o dono); sem os dois, registra e não manda', async () => {
+    const env = { ...ENV, DONO_WHATSAPP: '', SUPORTE_WHATSAPP: '5579900000001, 5544900000002,5544900000003' };
+    const [m] = await rodar('Compara', { env, input: [{ em: T0, pecas: pecas({ 'Ponte (PC → painel)': 'fora' }) }], memoria: {} });
+    assert.equal(m.json.telefone, '5579900000001');
+    const [n] = await rodar('Compara', { env: { ...ENV, DONO_WHATSAPP: '', SUPORTE_WHATSAPP: '' }, input: [{ em: T0, pecas: pecas({ 'Ponte (PC → painel)': 'fora' }) }], memoria: {} });
+    assert.equal(n.json.semDestino, true);
+    assert.match(n.json.motivo, /DONO_WHATSAPP e SUPORTE_WHATSAPP/);
+    assert.equal(n.json.telefone, undefined);
 });

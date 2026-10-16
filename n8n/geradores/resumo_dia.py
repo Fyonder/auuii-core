@@ -3,7 +3,9 @@
 Suporte: resumo do dia (dono, 16/10/2026: "o 2 é só pra 2 adms do painel")
 
 Todo dia, no horário que o painel escolher (Configurações → WhatsApp e Nina → Número do
-suporte), manda por WhatsApp um resumo do número do suporte pra até 2 pessoas cadastradas lá.
+suporte), manda por WhatsApp um resumo do número do suporte pra 2 pessoas: por padrão os 2
+primeiros números de SUPORTE_WHATSAPP (dono, 16/10/2026: "os números já vêm do servidor: o
+meu, o do meu sócio e o do suporte" — nessa ordem); o painel pode trocar por outros.
 Quem monta o texto é o backend (suporteAutomacoes.js: conversas, 1ª resposta, quem espera,
 Nina); o n8n só pergunta a hora certa e manda.
 
@@ -33,9 +35,15 @@ JS_E_HORA = r"""// Só segue se for a hora e ainda não mandou hoje. A janela te
 const JANELA_MIN = 15;
 const cfg = ($input.first().json || {}).resumoDiario || {};
 if (!cfg.ligado) return [];
-const destinatarios = (Array.isArray(cfg.destinatarios) ? cfg.destinatarios : [])
+let destinatarios = (Array.isArray(cfg.destinatarios) ? cfg.destinatarios : [])
   .map((d) => ({ nome: String(d.nome || '').trim(), telefone: String(d.telefone || '').replace(/\D/g, '') }))
   .filter((d) => d.telefone.length >= 12);
+// Sem destinatário no painel: os 2 primeiros de SUPORTE_WHATSAPP (dono e sócio; o 3º é o
+// próprio número do suporte).
+if (!destinatarios.length) {
+  destinatarios = String($env.SUPORTE_WHATSAPP || '').split(/[,;\s]+/).map((n) => n.replace(/\D/g, ''))
+    .filter((n) => n.length >= 12).slice(0, 2).map((telefone, i) => ({ nome: i === 0 ? 'dono' : 'sócio', telefone }));
+}
 if (!destinatarios.length) return [];
 const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(cfg.horario || ''));
 if (!m) return [];

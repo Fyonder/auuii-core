@@ -2,8 +2,10 @@
 """
 Guardião: tudo de pé? (dono, 16/10/2026: "o 5 só pra mim")
 
-A cada 5 minutos confere o que sustenta o atendimento e avisa UMA pessoa (DONO_WHATSAPP, no
-.env do Kali) quando algo cai — e quando volta. Enquanto continua caído, lembra a cada hora.
+A cada 5 minutos confere o que sustenta o atendimento e avisa UMA pessoa quando algo cai — e
+quando volta. Enquanto continua caído, lembra a cada hora. Quem recebe: o 1º número de
+SUPORTE_WHATSAPP (dono, 16/10/2026: "os números já vêm do servidor: o meu, o do meu sócio e o
+do suporte" — nessa ordem), ou DONO_WHATSAPP se estiver no .env.
 
   1. Checa (código, chamadas HTTP com 8 s de limite cada):
        - Evolution: /instance/connectionState/goby e /goby-suporte → "open"
@@ -17,7 +19,7 @@ A cada 5 minutos confere o que sustenta o atendimento e avisa UMA pessoa (DONO_W
      que caiu, pelo número da Nina (goby). Se a Evolution inteira caiu, não tem por onde mandar:
      fica no log e no histórico do n8n (e a próxima rodada, quando voltar, avisa que voltou).
 
-Sem DONO_WHATSAPP no .env, o fluxo confere e registra, mas não manda nada.
+Sem nenhum dos dois no .env, o fluxo confere e registra, mas não manda nada.
 
 Gerar: python n8n/geradores/guardiao.py   (grava n8n/workflows/guardiao.json)
 Testar: node --test n8n/test/fluxo-guardiao.test.js
@@ -79,7 +81,9 @@ const dados = $getWorkflowStaticData('global');
 if (!dados.pecas) dados.pecas = {};
 const agora = $input.first().json.em || Date.now();
 const pecas = $input.first().json.pecas || {};
-const destino = String($env.DONO_WHATSAPP || '').replace(/\D/g, '');
+// O dono: DONO_WHATSAPP, ou o 1º de SUPORTE_WHATSAPP (ordem: dono, sócio, número do suporte).
+const primeiroSuporte = String($env.SUPORTE_WHATSAPP || '').split(/[,;\s]+/).map((n) => n.replace(/\D/g, '')).filter((n) => n.length >= 12)[0] || '';
+const destino = String($env.DONO_WHATSAPP || '').replace(/\D/g, '') || primeiroSuporte;
 const caidas = [];
 const voltaram = [];
 const lembrar = [];
@@ -111,7 +115,7 @@ const mensagem = [`🛡️ *Guardião · ${hora}*`, ...linhas].join('\n');
 const okSuporte = pecas['WhatsApp do suporte (goby-suporte)'] && pecas['WhatsApp do suporte (goby-suporte)'].ok;
 const okNina = pecas['WhatsApp da Nina (goby)'] && pecas['WhatsApp da Nina (goby)'].ok;
 const instancia = okSuporte ? 'goby-suporte' : okNina ? 'goby' : null;
-if (!destino) return [{ json: { mensagem, semDestino: true, motivo: 'DONO_WHATSAPP vazio no .env' } }];
+if (!destino) return [{ json: { mensagem, semDestino: true, motivo: 'DONO_WHATSAPP e SUPORTE_WHATSAPP vazios no .env' } }];
 if (!instancia) return [{ json: { mensagem, semDestino: true, motivo: 'os dois números estão fora: não há por onde mandar' } }];
 return [{ json: { telefone: destino, instancia, mensagem } }];
 """
@@ -202,8 +206,7 @@ def conferir(f):
     for n in f["nodes"]:
         if n["type"] == "n8n-nodes-base.httpRequest":
             assert "batching" not in n["parameters"].get("options", {}), "batching do nó HTTP trava (14/10/2026)"
-    assert "$env.DONO_WHATSAPP" in texto, "o aviso vai só pro dono"
-    assert "SUPORTE_WHATSAPP" not in texto, "não é pro suporte: é só pro dono"
+    assert "$env.DONO_WHATSAPP" in texto and "SUPORTE_WHATSAPP" in texto, "o aviso vai só pro dono: DONO_WHATSAPP ou o 1º de SUPORTE_WHATSAPP"
     assert f["connections"]["Tem pra quem?"]["main"][1] == [], "sem destino não manda"
 
 
