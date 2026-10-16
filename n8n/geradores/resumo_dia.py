@@ -77,7 +77,8 @@ def montar():
         {
             "parameters": {"method": "GET", "url": BACKEND + "automacoes", "sendHeaders": True, "headerParameters": CHAVE, "options": {"timeout": TIMEOUT_MS}},
             "name": "Automações", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
-            "position": [220, 0], "notesInFlow": True, "notes": "o que o painel configurou (horário, destinatários)", "id": _id(2),
+            "position": [220, 0], "onError": "continueRegularOutput",
+            "notesInFlow": True, "notes": "o que o painel configurou (horário, destinatários); backend fora = rodada em branco", "id": _id(2),
         },
         {
             "parameters": {"jsCode": JS_E_HORA},

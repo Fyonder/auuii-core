@@ -46,8 +46,9 @@
         220,
         0
       ],
+      "onError": "continueRegularOutput",
       "notesInFlow": true,
-      "notes": "o que o painel configurou (horário, destinatários)",
+      "notes": "o que o painel configurou (horário, destinatários); backend fora = rodada em branco",
       "id": "0e5d0d1a-0000-4000-9000-000000000002"
     },
     {
