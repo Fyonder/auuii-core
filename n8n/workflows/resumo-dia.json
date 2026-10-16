@@ -1,0 +1,217 @@
+{
+  "id": "resumoDia0000001",
+  "name": "Suporte: resumo do dia",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "name": "A cada 15 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "0e5d0d1a-0000-4000-9000-000000000001"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/suporte/automacoes",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-suporte-api-key",
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Automações",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "o que o painel configurou (horário, destinatários)",
+      "id": "0e5d0d1a-0000-4000-9000-000000000002"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Só segue se for a hora e ainda não mandou hoje. A janela tem o tamanho do intervalo\n// do gatilho (15 min): o horário \"21:30\" dispara na rodada entre 21:30 e 21:44.\nconst JANELA_MIN = 15;\nconst cfg = ($input.first().json || {}).resumoDiario || {};\nif (!cfg.ligado) return [];\nconst destinatarios = (Array.isArray(cfg.destinatarios) ? cfg.destinatarios : [])\n  .map((d) => ({ nome: String(d.nome || '').trim(), telefone: String(d.telefone || '').replace(/\\D/g, '') }))\n  .filter((d) => d.telefone.length >= 12);\nif (!destinatarios.length) return [];\nconst m = /^([01]\\d|2[0-3]):([0-5]\\d)$/.exec(String(cfg.horario || ''));\nif (!m) return [];\nconst alvo = Number(m[1]) * 60 + Number(m[2]);\nconst agora = $env.RESUMO_AGORA ? Number($env.RESUMO_AGORA) : Date.now();\nconst partes = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(agora));\nconst p = (t) => partes.find((x) => x.type === t).value;\nconst hoje = `${p('year')}-${p('month')}-${p('day')}`;\nconst minuto = Number(p('hour')) * 60 + Number(p('minute'));\nif (minuto < alvo || minuto >= alvo + JANELA_MIN) return [];\nconst dados = $getWorkflowStaticData('global');\nif (dados.ultimoDia === hoje) return [];\nreturn [{ json: { dia: hoje, destinatarios } }];\n"
+      },
+      "name": "É hora?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "ligado, na janela do horário, 1 vez por dia",
+      "id": "0e5d0d1a-0000-4000-9000-000000000003"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.AUUII_API_URL }}/api/suporte/goby/suporte/resumo-dia?dia={{ $json.dia }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-suporte-api-key",
+              "value": "={{ $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Resumo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "o backend monta o texto",
+      "id": "0e5d0d1a-0000-4000-9000-000000000004"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Marca que mandou hoje ANTES de enviar: se o envio falhar, não fica tentando a cada 15 min\n// (quem quiser confere no histórico do n8n). Um item por destinatário.\nconst hora = $('É hora?').first().json;\nconst resumo = $input.first().json || {};\nconst texto = String(resumo.texto || '').trim();\nif (!texto) return [];\nconst dados = $getWorkflowStaticData('global');\ndados.ultimoDia = hora.dia;\nreturn hora.destinatarios.map((d) => ({ json: { telefone: d.telefone, nome: d.nome, mensagem: texto } }));\n"
+      },
+      "name": "Uma por pessoa",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "0e5d0d1a-0000-4000-9000-000000000005"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/goby-suporte",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $json.telefone, text: $json.mensagem }) }}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Manda no WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "notesInFlow": true,
+      "notes": "pelo número do suporte, pra cada destinatário",
+      "id": "0e5d0d1a-0000-4000-9000-000000000006"
+    }
+  ],
+  "connections": {
+    "A cada 15 minutos": {
+      "main": [
+        [
+          {
+            "node": "Automações",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Automações": {
+      "main": [
+        [
+          {
+            "node": "É hora?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "É hora?": {
+      "main": [
+        [
+          {
+            "node": "Resumo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resumo": {
+      "main": [
+        [
+          {
+            "node": "Uma por pessoa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Uma por pessoa": {
+      "main": [
+        [
+          {
+            "node": "Manda no WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveExecutionProgress": false,
+    "timezone": "America/Sao_Paulo"
+  },
+  "pinData": {},
+  "active": false
+}

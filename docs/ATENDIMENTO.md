@@ -184,6 +184,21 @@ responde pelo painel e a resposta sai pelo número do suporte.
   (`GET /instance/connect/goby-suporte`). Ordem de deploy: backend → painel; antes do backend
   novo, mensagem nesse número cai como "auuii" (escondida do painel).
 
+### 16/10: automações do número do suporte (fora do horário, resumo do dia, guardião)
+
+Pedido do dono: "o que mais meu n8n pode fazer?". Três coisas, nesta ordem de decisão dele:
+
+| | Onde liga | Quem recebe | O que faz |
+|---|---|---|---|
+| **Fora do horário** | painel: Configurações → WhatsApp e Nina → Número do suporte (**nasce desligado**) | quem escreve no número do suporte | resposta automática do sistema, uma por conversa a cada 12 h, só conversa particular; não tira da fila nem conta como resposta (backend `suporteAutomacoes.js`, gancho no `registrarEvento`) |
+| **Resumo do dia** | mesmo lugar: horário + até 2 destinatários | os 2 administradores cadastrados | fluxo `resumo-dia.json` (a cada 15 min pergunta ao backend se é hora; manda 1 vez por dia pelo número do suporte). O texto vem de `GET /api/suporte/goby/suporte/resumo-dia`: conversas, 1ª resposta, quem espera, Nina |
+| **Guardião** | `.env` do Kali: `DONO_WHATSAPP` | só o dono | fluxo `guardiao.json` (a cada 5 min): Evolution (`goby`, `goby-suporte`), ponte `/saude` e backend `/health`. Avisa quando cai, lembra a cada hora, avisa quando volta. Manda pelo número do suporte; se foi ele que caiu, pelo da Nina; se a Evolution inteira caiu, só registra |
+
+Geradores: `n8n/geradores/guardiao.py` e `resumo_dia.py`; testes em `n8n/test/fluxo-guardiao.test.js`
+e `fluxo-resumo.test.js`. Os dois fluxos nascem desligados: ligar no n8n depois de importar.
+Avisos do robô continuam a cada minuto (ver "Como aliviar" na nota do Obsidian "Automações do
+suporte").
+
 ### 13/10: grupos do número do suporte viram conversa
 
 Pedido do dono: "preciso de mensagens dos grupos". O número do suporte está nos grupos de
