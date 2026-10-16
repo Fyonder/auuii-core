@@ -24,7 +24,7 @@ function rodar(nomeNo, { env = {}, input = [], nos = {}, memoria = {} } = {}) {
 const AS = (hhmm, dia = '2026-10-16') => String(Date.parse(`${dia}T${hhmm}:00-03:00`));
 const cfg = (extra = {}) => ({ success: true, resumoDiario: { ligado: true, horario: '21:30', destinatarios: [{ nome: 'Carlos', telefone: '5544999990001' }, { nome: 'Ana', telefone: '5544999990002' }], ...extra } });
 
-test('estrutura: a cada 15 min → Automações → É hora? → Resumo → Uma por pessoa → Manda pelo suporte', () => {
+test('estrutura: a cada 15 min → Automações → É hora? → Resumo → Uma por pessoa → Manda pelo número da Nina', () => {
     assert.deepEqual(destinos('A cada 15 minutos'), ['Automações']);
     assert.deepEqual(destinos('Automações'), ['É hora?']);
     assert.deepEqual(destinos('É hora?'), ['Resumo']);
@@ -34,7 +34,7 @@ test('estrutura: a cada 15 min → Automações → É hora? → Resumo → Uma 
     assert.match(no['Automações'].parameters.url, /\/api\/suporte\/goby\/suporte\/automacoes$/);
     assert.match(no['Resumo'].parameters.url, /resumo-dia\?dia=\{\{ \$json\.dia \}\}/);
     assert.equal(no['Automações'].parameters.headerParameters.parameters[0].name, 'x-suporte-api-key');
-    assert.match(no['Manda no WhatsApp'].parameters.url, /sendText\/goby-suporte$/);
+    assert.match(no['Manda no WhatsApp'].parameters.url, /sendText\/goby$/, 'dono, 16/10/2026: "o WhatsApp que a Nina responde, não o outro"');
     assert.equal(no['Manda no WhatsApp'].parameters.options.batching, undefined);
     assert.equal(fluxo.active, false);
 });

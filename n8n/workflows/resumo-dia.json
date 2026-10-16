@@ -110,7 +110,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/goby-suporte",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/goby",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -145,7 +145,7 @@
       ],
       "onError": "continueRegularOutput",
       "notesInFlow": true,
-      "notes": "pelo número do suporte, pra cada destinatário",
+      "notes": "pelo número da Nina, pra cada destinatário",
       "id": "0e5d0d1a-0000-4000-9000-000000000006"
     }
   ],

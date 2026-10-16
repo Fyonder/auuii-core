@@ -15,8 +15,9 @@ do suporte" — nessa ordem), ou DONO_WHATSAPP se estiver no .env.
      backend (que está na nuvem e cairia junto com a internet de casa).
   2. Compara (código): guarda o estado anterior na memória do fluxo ($getWorkflowStaticData)
      e decide se há aviso: caiu (manda), continua caído há 60 min (lembra), voltou (manda).
-  3. Manda no WhatsApp: Evolution sendText pelo número do suporte (goby-suporte); se ESSE for o
-     que caiu, pelo número da Nina (goby). Se a Evolution inteira caiu, não tem por onde mandar:
+  3. Manda no WhatsApp: Evolution sendText pelo número da NINA (goby) — dono, 16/10/2026:
+     "tem que ser o WhatsApp que a Nina responde, não o outro". Se ESSE for o que caiu, pelo
+     número do suporte (goby-suporte). Se a Evolution inteira caiu, não tem por onde mandar:
      fica no log e no histórico do n8n (e a próxima rodada, quando voltar, avisa que voltou).
 
 Sem nenhum dos dois no .env, o fluxo confere e registra, mas não manda nada.
@@ -111,10 +112,11 @@ if (voltaram.length) linhas.push('🟢 *Voltou:*', ...voltaram.map((c) => `• $
 if (!linhas.length) return [];
 const hora = new Date(agora).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
 const mensagem = [`🛡️ *Guardião · ${hora}*`, ...linhas].join('\n');
-// Por qual número mandar: o do suporte; se ele caiu, o da Nina. Se os dois caíram, não há por onde.
+// Por qual número mandar: o da Nina (dono, 16/10/2026); se ele caiu, o do suporte. Se os dois
+// caíram, não há por onde.
 const okSuporte = pecas['WhatsApp do suporte (goby-suporte)'] && pecas['WhatsApp do suporte (goby-suporte)'].ok;
 const okNina = pecas['WhatsApp da Nina (goby)'] && pecas['WhatsApp da Nina (goby)'].ok;
-const instancia = okSuporte ? 'goby-suporte' : okNina ? 'goby' : null;
+const instancia = okNina ? 'goby' : okSuporte ? 'goby-suporte' : null;
 if (!destino) return [{ json: { mensagem, semDestino: true, motivo: 'DONO_WHATSAPP e SUPORTE_WHATSAPP vazios no .env' } }];
 if (!instancia) return [{ json: { mensagem, semDestino: true, motivo: 'os dois números estão fora: não há por onde mandar' } }];
 return [{ json: { telefone: destino, instancia, mensagem } }];
@@ -169,7 +171,7 @@ def montar():
             },
             "name": "Manda no WhatsApp", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
             "position": [880, -100], "onError": "continueRegularOutput",
-            "notesInFlow": True, "notes": "pro DONO_WHATSAPP, pelo número que estiver de pé", "id": _id(5),
+            "notesInFlow": True, "notes": "pro dono, pelo número da Nina (ou do suporte se a Nina caiu)", "id": _id(5),
         },
     ]
     liga = lambda dst, idx=0: {"node": dst, "type": "main", "index": idx}

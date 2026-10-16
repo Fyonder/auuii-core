@@ -94,7 +94,7 @@ test('Compara: caiu avisa uma vez; 5 min depois, nada; 1 h depois, lembra; volto
     const ruim = { 'Backend (Render)': 'backend não respondeu (timeout)' };
     const [caiu] = await rodar('Compara', { env: ENV, input: [{ em: T0, pecas: pecas(ruim) }], memoria });
     assert.equal(caiu.json.telefone, '5544999990000');
-    assert.equal(caiu.json.instancia, 'goby-suporte', 'manda pelo número do suporte quando ele está de pé');
+    assert.equal(caiu.json.instancia, 'goby', 'manda pelo número da Nina (dono, 16/10/2026: "o WhatsApp que a Nina responde, não o outro")');
     assert.match(caiu.json.mensagem, /🔴 \*Caiu:\*\n• Backend \(Render\): backend não respondeu/);
     assert.match(caiu.json.mensagem, /Guardião · \d{2}:\d{2}/);
 
@@ -108,10 +108,10 @@ test('Compara: caiu avisa uma vez; 5 min depois, nada; 1 h depois, lembra; volto
     assert.ok(memoria.pecas['Backend (Render)'].ok);
 });
 
-test('Compara: caiu o número do suporte → manda pelo da Nina; os dois → não tem por onde', async () => {
+test('Compara: caiu o número da Nina → manda pelo do suporte; os dois → não tem por onde', async () => {
     const memoria = {};
-    const [m] = await rodar('Compara', { env: ENV, input: [{ em: T0, pecas: pecas({ 'WhatsApp do suporte (goby-suporte)': 'WhatsApp close' }) }], memoria });
-    assert.equal(m.json.instancia, 'goby');
+    const [m] = await rodar('Compara', { env: ENV, input: [{ em: T0, pecas: pecas({ 'WhatsApp da Nina (goby)': 'WhatsApp close' }) }], memoria });
+    assert.equal(m.json.instancia, 'goby-suporte');
     const [n] = await rodar('Compara', { env: ENV, input: [{ em: T0, pecas: pecas({ 'WhatsApp do suporte (goby-suporte)': 'x', 'WhatsApp da Nina (goby)': 'y' }) }], memoria: {} });
     assert.equal(n.json.semDestino, true);
     assert.match(n.json.motivo, /os dois números/);

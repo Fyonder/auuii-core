@@ -14,7 +14,8 @@ Nina); o n8n só pergunta a hora certa e manda.
      ainda não mandou hoje (memória do fluxo). Senão, para.
   3. GET /api/suporte/goby/suporte/resumo-dia?dia=hoje → texto pronto.
   4. Uma por pessoa (código): marca "mandou hoje" e vira um item por destinatário.
-  5. Manda no WhatsApp pelo número do suporte (goby-suporte).
+  5. Manda no WhatsApp pelo número da Nina (goby) — dono, 16/10/2026: "tem que ser o
+     WhatsApp que a Nina responde, não o outro".
 
 Gerar: python n8n/geradores/resumo_dia.py   (grava n8n/workflows/resumo-dia.json)
 Testar: node --test n8n/test/fluxo-resumo.test.js
@@ -106,7 +107,7 @@ def montar():
         {
             "parameters": {
                 "method": "POST",
-                "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/goby-suporte",
+                "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/goby",
                 "sendHeaders": True,
                 "headerParameters": {"parameters": [
                     {"name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}"},
@@ -118,7 +119,7 @@ def montar():
             },
             "name": "Manda no WhatsApp", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
             "position": [1100, 0], "onError": "continueRegularOutput",
-            "notesInFlow": True, "notes": "pelo número do suporte, pra cada destinatário", "id": _id(6),
+            "notesInFlow": True, "notes": "pelo número da Nina, pra cada destinatário", "id": _id(6),
         },
     ]
     liga = lambda dst, idx=0: {"node": dst, "type": "main", "index": idx}
@@ -158,7 +159,7 @@ def conferir(f):
             assert "batching" not in n["parameters"].get("options", {}), "batching do nó HTTP trava (14/10/2026)"
             if n["name"] != "Manda no WhatsApp":
                 assert n["parameters"]["headerParameters"] == CHAVE, n["name"]
-    assert "sendText/goby-suporte" in texto, "o resumo sai pelo número do suporte"
+    assert "sendText/goby\"" in texto and "sendText/goby-suporte" not in texto, "o resumo sai pelo número da Nina (dono, 16/10/2026)"
 
 
 if __name__ == '__main__':
