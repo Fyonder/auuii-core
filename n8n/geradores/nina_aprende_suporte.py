@@ -48,15 +48,22 @@ CHAVE = {"parameters": [{"name": "x-suporte-api-key", "value": "={{ $env.AUUII_A
 # voltaram 429 e, pior, a rodada comia a cota do DIA da Nina. Decisão do dono: o aprendizado usa
 # um modelo SÓ DELE (MODELO_PADRAO, cota própria) e vai devagar: 1 lote por minuto, resposta
 # curta, e uma pausa antes da junção. Trocar o modelo: NINA_APRENDE_MODELO no .env do Kali.
-# Modelo SÓ do aprendizado, com cota própria (a Groq conta tokens por modelo). Não é o da Nina
-# (gpt-oss-120b). O Llama 4 Scout saiu do catálogo da Groq: em 14/10/2026 a rodada das 03:30
-# levou 404 "model_not_found" nos 30 lotes. O gpt-oss-20b a conta já usa (reserva da Nina).
-MODELO_PADRAO = 'openai/gpt-oss-20b'
+# Modelo SÓ do aprendizado, com cota própria (a Groq conta tokens por modelo, por minuto E por
+# dia). Não pode ser o da Nina (gpt-oss-120b) nem a reserva dela (gpt-oss-20b): em 14/10/2026
+# duas rodadas no 20b gastaram o teto do DIA dele (200 mil tokens) e a reserva da Nina ficou
+# sem cota. O Llama 4 Scout saiu do catálogo (404). Os modelos de texto que a conta tem são
+# gpt-oss-120b, gpt-oss-20b, gpt-oss-safeguard-20b e qwen/qwen3.8-27b: o Qwen é o único só
+# nosso. Uma noite gasta ~100 mil tokens (30 lotes de ~3,5 mil + a junção).
+MODELO_PADRAO = 'qwen/qwen3.8-27b'
 # Entre um lote e outro: a Groq conta tokens POR MINUTO. Fica abaixo de 65 s de propósito: a
 # partir de 65 s o nó Wait do n8n grava a execução como "esperando" e depende do relógio
 # interno pra voltar; abaixo disso ele espera em memória, simples. 61 s já vira o minuto.
 GROQ_INTERVALO_S = 61
-GROQ_MAX_RESPOSTA = 3000
+# Resposta curta de propósito: o plano grátis da Groq limita TOKENS DE SAÍDA por minuto (no
+# Qwen, 1000) e recusa de cara ("Request too large… OTPM") qualquer pedido com
+# max_completion_tokens acima disso — foi o que derrubou 3 lotes e a junção em 14/10. Um lote
+# devolve ~10 regras (≈ 500 tokens); a junção, até 25 (≈ 900).
+GROQ_MAX_RESPOSTA = 1000
 PAUSA_ANTES_DA_JUNCAO_S = 65
 GROQ_TIMEOUT_MS = 120000
 
@@ -85,13 +92,17 @@ pra ensinar a Nina, a assistente virtual. Você recebe:
 - CANDIDATAS: numeradas a partir de 0, com o tema e em quantas conversas apareceram.
 
 Faça:
-1. Junte as candidatas com o MESMO sentido numa regra só e liste os números delas em "de".
-2. Reescreva cada regra clara e geral, em português, começando com "Quando", até 300 caracteres. Sem nome, \
+1. Junte as candidatas com o MESMO sentido numa regra só e liste os números delas em "de". Temas diferentes \
+(transferir vaga, cliente que não atende, código do pedido, maquininha, app...) são regras DIFERENTES: nunca \
+resuma vários temas numa regra só.
+2. Toda candidata com 3 conversas ou mais tem que estar no "de" de alguma regra (juntada ou sozinha), a não \
+ser que caia no item 5. Devolver poucas regras quando há muitas candidatas é ERRO.
+3. Reescreva cada regra clara e geral, em português, começando com "Quando", até 300 caracteres. Sem nome, \
 telefone, valor em dinheiro, placa, endereço, número de pedido ou nome de loja, e sem marcadores como [nome].
-3. Do jeito de falar (tema "jeito de falar"), no máximo 2 regras, começando com "Ao responder".
-4. Descarte o que for caso isolado, confuso, contraditório entre as candidatas, ou que prometa valor, prazo ou \
+4. Do jeito de falar (tema "jeito de falar"), no máximo 2 regras, começando com "Ao responder".
+5. Descarte o que for caso isolado, confuso, contraditório entre as candidatas, ou que prometa valor, prazo ou \
 política que a equipe não deixou claro.
-5. No máximo 30 regras, as mais úteis primeiro.
+6. No máximo 25 regras, as mais úteis primeiro.
 
 Responda SÓ JSON: {"regras":[{"texto":"...","tema":"...","de":[0,3,7]}]}. Nada pra ensinar: {"regras":[]}."""
 
@@ -312,13 +323,16 @@ respostas.forEach((it, i) => {
 });
 candidatas.sort((a, b) => b.conversas - a.conversas);
 const top = candidatas.slice(0, 200);
+// Pra Groq só as 60 mais vistas (a resposta cabe em 1000 tokens); as outras ficam em `candidatas`
+// e entram pela rede de segurança do "Prepara envio" se tiverem conversas o bastante.
+const listadas = top.slice(0, 60);
 const conhecidos = (($('Existentes').first().json || {}).conhecidos || []).slice(0, 100).map((t) => String(t).slice(0, 160));
 const pedido = [
   'JÁ SABE:',
   conhecidos.length ? conhecidos.map((t) => `- ${t}`).join('\n') : '(nada ainda)',
   '',
   'CANDIDATAS:',
-  top.map((c, i) => `${i}. [${c.tema || 'sem tema'}] ${c.texto} (${c.conversas} conversas)`).join('\n'),
+  listadas.map((c, i) => `${i}. [${c.tema || 'sem tema'}] ${c.texto} (${c.conversas} conversas)`).join('\n'),
 ].join('\n');
 return [{ json: { candidatas: top, falhas, lotes: respostas.length, pedido } }];
 """
@@ -345,9 +359,31 @@ for (const r of consolidou ? j.regras : []) {
   const ja = porTexto.get(texto);
   if (!ja || ja.conversas < conversas) porTexto.set(texto, { texto, tema, conversas });
 }
-const sugestoes = [...porTexto.values()].sort((a, b) => b.conversas - a.conversas).slice(0, 30);
-// Avança o marcador só se a noite rendeu: junção ok e no máximo metade dos lotes com erro.
-const avancar = consolidou && junta.falhas <= junta.lotes / 2;
+// Rede de segurança (14/10/2026: a Groq juntou 143 candidatas numa regra só de "jeito de falar"
+// e descartou o resto): candidata com conversas o bastante que a junção NÃO citou vai mesmo
+// assim, uma por tema (a mais vista) — fora "jeito de falar", que a junção já resume.
+// Junção falhou (cota, timeout): as candidatas vão SEM junção, uma por tema, e a noite anda
+// mesmo assim (14/10/2026: três noites seguidas sem junção relendo a mesma fatia).
+const citadas = new Set();
+for (const r of consolidou ? j.regras : []) for (const i of Array.isArray(r.de) ? r.de : []) citadas.add(Number(i));
+const temaChave = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-z ]/g, ' ').trim().split(/\s+/)[0].replace(/s$/, '');
+const porTema = new Map();
+{
+  junta.candidatas.forEach((c, i) => {
+    const texto = String((c && c.texto) || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+    const tema = String((c && c.tema) || '').slice(0, 40);
+    if (citadas.has(i) || (c.conversas || 0) < MIN || texto.length < 10 || MARCADOR.test(texto)) return;
+    if (/jeito de falar/i.test(tema) || porTexto.has(texto)) return;
+    const k = temaChave(tema) || texto.slice(0, 30);
+    const ja = porTema.get(k);
+    if (!ja || ja.conversas < c.conversas) porTema.set(k, { texto, tema, conversas: c.conversas, semJuncao: true });
+  });
+}
+const sugestoes = [...porTexto.values(), ...porTema.values()].sort((a, b) => b.conversas - a.conversas).slice(0, 30);
+// Avança o marcador se a leitura rendeu: no máximo metade dos lotes com erro. A junção
+// falhar não segura mais a noite (as candidatas foram sem junção).
+const avancar = junta.falhas <= junta.lotes / 2;
 return [{ json: { sugestoes, avancar, falhas: junta.falhas, candidatas: junta.candidatas.length } }];
 """
 
@@ -407,7 +443,7 @@ def http_backend(nome, metodo, rota, pos, corpo=None, nid=''):
     }
 
 
-def http_groq(nome, prompt, entrada, pos, nid):
+def http_groq(nome, prompt, entrada, pos, nid, raciocinio='low'):
     # `reasoning_effort` só existe nos gpt-oss: mandado pro Llama, a Groq devolve 400.
     modelo = "($env.NINA_APRENDE_MODELO || '" + MODELO_PADRAO + "')"
     corpo = (
@@ -416,7 +452,7 @@ def http_groq(nome, prompt, entrada, pos, nid):
         "response_format: { type: 'json_object' }, messages: [ { role: 'system', content: "
         + json.dumps(prompt, ensure_ascii=False)
         + " }, { role: 'user', content: " + entrada + " } ] }, "
-        + modelo + ".startsWith('openai/gpt-oss') ? { reasoning_effort: $env.NINA_APRENDE_RACIOCINIO || 'low' } : {})) }}"
+        + modelo + ".startsWith('openai/gpt-oss') ? { reasoning_effort: $env.NINA_APRENDE_RACIOCINIO || '" + raciocinio + "' } : {})) }}"
     )
     return {
         "parameters": {
@@ -549,7 +585,8 @@ def montar():
             "webhookId": "7a1e0c3b-5d2f-4e8a-9b10-0000000000w1",
             "id": base + "15",
         },
-        http_groq("Groq junta parecidas", PROMPT_JUNTA, "$json.pedido", [1760, -100], base + "10"),
+        # A junção é UMA chamada por noite e decide o que chega ao gerente: pensa mais (medium).
+        http_groq("Groq junta parecidas", PROMPT_JUNTA, "$json.pedido", [1760, -100], base + "10", raciocinio='medium'),
         {
             "parameters": {"httpMethod": "POST", "path": "nina-aprende-rodar", "responseMode": "onReceived", "options": {}},
             "name": "Rodar agora",
