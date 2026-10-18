@@ -71,6 +71,10 @@ services:
       ROBO_GOBY_KEY: ${ROBO_GOBY_KEY:-}
       # Nina: segundos que cada mensagem espera pra juntar as seguidas (fluxo: "Espera mais mensagens")
       NINA_ESPERA_JUNTAR: ${NINA_ESPERA_JUNTAR:-8}
+      # Guardiao (fluxo guardiao.json, a cada 5 min): avisa SO o dono quando Evolution, ponte ou
+      # backend caem (e quando voltam). Vazio = o 1o numero de SUPORTE_WHATSAPP (ordem: dono,
+      # socio, numero do suporte). O resumo do dia vai pros 2 primeiros.
+      DONO_WHATSAPP: ${DONO_WHATSAPP:-}
       # Nina aprende com o suporte (fluxo da madrugada): vazios = os padroes do gerador.
       # Modelo: um SO do aprendizado (cota propria na Groq), nunca o da Nina (gpt-oss-120b).
       NINA_APRENDE_MODELO: ${NINA_APRENDE_MODELO:-}
