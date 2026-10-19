@@ -2,10 +2,9 @@
 """
 Guardião: tudo de pé? (dono, 16/10/2026: "o 5 só pra mim")
 
-A cada 5 minutos confere o que sustenta o atendimento e avisa UMA pessoa quando algo cai — e
-quando volta. Enquanto continua caído, lembra a cada hora. Quem recebe: o 1º número de
-SUPORTE_WHATSAPP (dono, 16/10/2026: "os números já vêm do servidor: o meu, o do meu sócio e o
-do suporte" — nessa ordem), ou DONO_WHATSAPP se estiver no .env.
+A cada 5 minutos confere o que sustenta o atendimento e avisa os destinatários do Resumo do dia
+quando algo cai — e quando volta. Enquanto continua caído, lembra a cada hora. Se a lista
+personalizada estiver vazia, o backend usa os dois primeiros números de SUPORTE_WHATSAPP.
 
   1. Checa (código, chamadas HTTP com 8 s de limite cada):
        - Evolution: /instance/connectionState/goby e /goby-suporte → "open"
@@ -15,12 +14,11 @@ do suporte" — nessa ordem), ou DONO_WHATSAPP se estiver no .env.
      backend (que está na nuvem e cairia junto com a internet de casa).
   2. Compara (código): guarda o estado anterior na memória do fluxo ($getWorkflowStaticData)
      e decide se há aviso: caiu (manda), continua caído há 60 min (lembra), voltou (manda).
-  3. Manda no WhatsApp: Evolution sendText pelo número da NINA (goby) — dono, 16/10/2026:
-     "tem que ser o WhatsApp que a Nina responde, não o outro". Se ESSE for o que caiu, pelo
-     número do suporte (goby-suporte). Se a Evolution inteira caiu, não tem por onde mandar:
-     fica no log e no histórico do n8n (e a próxima rodada, quando voltar, avisa que voltou).
+  3. Manda no WhatsApp: Evolution sendText para cada destinatário do Resumo do dia, pelo número
+     da Nina (goby) ou, se esse cair, pelo número do suporte (goby-suporte). Se a Evolution
+     inteira cair, não tem por onde mandar: fica no log e no histórico do n8n.
 
-Sem nenhum dos dois no .env, o fluxo confere e registra, mas não manda nada.
+Sem destinatários configurados, o fluxo confere e registra, mas não manda nada.
 
 Gerar: python n8n/geradores/guardiao.py   (grava n8n/workflows/guardiao.json)
 Testar: node --test n8n/test/fluxo-guardiao.test.js
@@ -34,6 +32,30 @@ INTERVALO_MIN = 5
 LEMBRA_MIN = 60
 TIMEOUT_CHECA_MS = 8000
 TIMEOUT_ENVIO_MS = 15000
+
+JS_CONTROLA = r"""// A consulta autenticada traz o estado e a mesma lista usada pelo resumo do suporte.
+const backend = ($env.AUUII_API_URL || 'https://ifood.onrender.com').replace(/\/+$/, '');
+const dados = $getWorkflowStaticData('global');
+try {
+  const r = await this.helpers.httpRequest({
+    method: 'GET',
+    url: `${backend}/api/suporte/goby/suporte/guardiao`,
+    headers: { 'x-suporte-api-key': $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN || '' },
+    json: true,
+    timeout: 8000,
+    ignoreHttpStatusErrors: true,
+    returnFullResponse: true,
+  });
+  const status = r.statusCode || r.status || 0;
+  const body = r.body ?? r;
+  if (status === 200 && body && Array.isArray(body.destinatarios)) {
+    dados.destinatarios = [...new Set(body.destinatarios.map((n) => String(n || '').replace(/\D/g, '')).filter((n) => n.length >= 12 && n.length <= 15))];
+  }
+  return [{ json: { ativo: !(status === 200 && body && body.ativo === false), consultou: status === 200 } }];
+} catch (e) {
+  return [{ json: { ativo: true, consultou: false, erro: String(e && e.message || e).slice(0, 160) } }];
+}
+"""
 
 JS_CHECA = r"""// Confere cada peça. Nunca lança: o resultado de cada uma é ok/erro, e o Compara decide.
 const evo = ($env.EVOLUTION_API_URL || 'http://evolution:8080').replace(/\/+$/, '');
@@ -82,9 +104,6 @@ const dados = $getWorkflowStaticData('global');
 if (!dados.pecas) dados.pecas = {};
 const agora = $input.first().json.em || Date.now();
 const pecas = $input.first().json.pecas || {};
-// O dono: DONO_WHATSAPP, ou o 1º de SUPORTE_WHATSAPP (ordem: dono, sócio, número do suporte).
-const primeiroSuporte = String($env.SUPORTE_WHATSAPP || '').split(/[,;\s]+/).map((n) => n.replace(/\D/g, '')).filter((n) => n.length >= 12)[0] || '';
-const destino = String($env.DONO_WHATSAPP || '').replace(/\D/g, '') || primeiroSuporte;
 const caidas = [];
 const voltaram = [];
 const lembrar = [];
@@ -112,14 +131,14 @@ if (voltaram.length) linhas.push('🟢 *Voltou:*', ...voltaram.map((c) => `• $
 if (!linhas.length) return [];
 const hora = new Date(agora).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
 const mensagem = [`🛡️ *Guardião · ${hora}*`, ...linhas].join('\n');
-// Por qual número mandar: o da Nina (dono, 16/10/2026); se ele caiu, o do suporte. Se os dois
-// caíram, não há por onde.
+// O destino é o que está escolhido no Resumo do dia (ou os números padrão do servidor).
 const okSuporte = pecas['WhatsApp do suporte (goby-suporte)'] && pecas['WhatsApp do suporte (goby-suporte)'].ok;
 const okNina = pecas['WhatsApp da Nina (goby)'] && pecas['WhatsApp da Nina (goby)'].ok;
 const instancia = okNina ? 'goby' : okSuporte ? 'goby-suporte' : null;
-if (!destino) return [{ json: { mensagem, semDestino: true, motivo: 'DONO_WHATSAPP e SUPORTE_WHATSAPP vazios no .env' } }];
+const destinatarios = Array.isArray(dados.destinatarios) ? dados.destinatarios : [];
+if (!destinatarios.length) return [{ json: { mensagem, semDestino: true, motivo: 'não há destinatários selecionados no Resumo do dia nem números padrão no servidor' } }];
 if (!instancia) return [{ json: { mensagem, semDestino: true, motivo: 'os dois números estão fora: não há por onde mandar' } }];
-return [{ json: { telefone: destino, instancia, mensagem } }];
+return destinatarios.map((telefone) => ({ json: { telefone, instancia, mensagem } }));
 """
 
 
@@ -135,26 +154,45 @@ def montar():
             "position": [0, 0], "id": _id(1),
         },
         {
-            "parameters": {"jsCode": JS_CHECA},
-            "name": "Checa", "type": "n8n-nodes-base.code", "typeVersion": 2,
-            "position": [220, 0], "notesInFlow": True, "notes": "Evolution (goby, goby-suporte), ponte, backend", "id": _id(2),
-        },
-        {
-            "parameters": {"jsCode": JS_COMPARA},
-            "name": "Compara", "type": "n8n-nodes-base.code", "typeVersion": 2,
-            "position": [440, 0], "notesInFlow": True, "notes": "caiu / continua (1 h) / voltou; memória do fluxo", "id": _id(3),
+            "parameters": {"jsCode": JS_CONTROLA},
+            "name": "Consulta controle", "type": "n8n-nodes-base.code", "typeVersion": 2,
+            "position": [220, 0], "notesInFlow": True,
+            "notes": "Só pausa com resposta explícita de desligado; falha de consulta mantém o monitor ativo",
+            "id": _id(2),
         },
         {
             "parameters": {
                 "conditions": {
                     "options": {"caseSensitive": True, "leftValue": "", "typeValidation": "loose", "version": 2},
-                    "conditions": [{"id": _id(4) + "-c", "leftValue": "={{ !$json.semDestino && !!$json.telefone }}", "rightValue": "", "operator": {"type": "boolean", "operation": "true", "singleValue": True}}],
+                    "conditions": [{"id": _id(3) + "-c", "leftValue": "={{ $json.ativo }}", "rightValue": "", "operator": {"type": "boolean", "operation": "true", "singleValue": True}}],
+                    "combinator": "and",
+                },
+                "looseTypeValidation": True, "options": {},
+            },
+            "name": "Monitor ligado?", "type": "n8n-nodes-base.if", "typeVersion": 2.2,
+            "position": [440, 0], "id": _id(3),
+        },
+        {
+            "parameters": {"jsCode": JS_CHECA},
+            "name": "Checa", "type": "n8n-nodes-base.code", "typeVersion": 2,
+            "position": [660, 0], "notesInFlow": True, "notes": "Evolution (goby, goby-suporte), ponte, backend", "id": _id(4),
+        },
+        {
+            "parameters": {"jsCode": JS_COMPARA},
+            "name": "Compara", "type": "n8n-nodes-base.code", "typeVersion": 2,
+            "position": [880, 0], "notesInFlow": True, "notes": "caiu / continua (1 h) / voltou; memória do fluxo", "id": _id(5),
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {"caseSensitive": True, "leftValue": "", "typeValidation": "loose", "version": 2},
+                    "conditions": [{"id": _id(6) + "-c", "leftValue": "={{ !$json.semDestino && !!$json.telefone }}", "rightValue": "", "operator": {"type": "boolean", "operation": "true", "singleValue": True}}],
                     "combinator": "and",
                 },
                 "looseTypeValidation": True, "options": {},
             },
             "name": "Tem pra quem?", "type": "n8n-nodes-base.if", "typeVersion": 2.2,
-            "position": [660, 0], "id": _id(4),
+            "position": [1100, 0], "id": _id(6),
         },
         {
             "parameters": {
@@ -170,13 +208,15 @@ def montar():
                 "options": {"timeout": TIMEOUT_ENVIO_MS, "response": {"response": {"neverError": True}}},
             },
             "name": "Manda no WhatsApp", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
-            "position": [880, -100], "onError": "continueRegularOutput",
-            "notesInFlow": True, "notes": "pro dono, pelo número da Nina (ou do suporte se a Nina caiu)", "id": _id(5),
+            "position": [1320, -100], "onError": "continueRegularOutput",
+            "notesInFlow": True, "notes": "para cada destinatário do Resumo do dia, pelo número disponível", "id": _id(7),
         },
     ]
     liga = lambda dst, idx=0: {"node": dst, "type": "main", "index": idx}
     conn = {
-        "A cada 5 minutos": {"main": [[liga("Checa")]]},
+        "A cada 5 minutos": {"main": [[liga("Consulta controle")]]},
+        "Consulta controle": {"main": [[liga("Monitor ligado?")]]},
+        "Monitor ligado?": {"main": [[liga("Checa")], []]},
         "Checa": {"main": [[liga("Compara")]]},
         "Compara": {"main": [[liga("Tem pra quem?")]]},
         "Tem pra quem?": {"main": [[liga("Manda no WhatsApp")], []]},
@@ -208,7 +248,9 @@ def conferir(f):
     for n in f["nodes"]:
         if n["type"] == "n8n-nodes-base.httpRequest":
             assert "batching" not in n["parameters"].get("options", {}), "batching do nó HTTP trava (14/10/2026)"
-    assert "$env.DONO_WHATSAPP" in texto and "SUPORTE_WHATSAPP" in texto, "o aviso vai só pro dono: DONO_WHATSAPP ou o 1º de SUPORTE_WHATSAPP"
+    assert "/api/suporte/goby/suporte/guardiao" in texto, "o Guardião usa a lista selecionada no Resumo do dia"
+    assert "AUUII_API_TOKEN_GOBY" in texto, "a leitura da lista de destinatários precisa de chave"
+    assert f["connections"]["Monitor ligado?"]["main"][1] == [], "com o Guardião desligado, as verificações param"
     assert f["connections"]["Tem pra quem?"]["main"][1] == [], "sem destino não manda"
 
 

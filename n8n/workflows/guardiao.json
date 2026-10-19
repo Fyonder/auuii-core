@@ -24,9 +24,9 @@
     },
     {
       "parameters": {
-        "jsCode": "// Confere cada peça. Nunca lança: o resultado de cada uma é ok/erro, e o Compara decide.\nconst evo = ($env.EVOLUTION_API_URL || 'http://evolution:8080').replace(/\\/+$/, '');\nconst backend = ($env.AUUII_API_URL || 'https://ifood.onrender.com').replace(/\\/+$/, '');\nconst ponte = ($env.PONTE_URL || 'http://ponte:3100').replace(/\\/+$/, '');\nconst TIMEOUT = 8000;\nconst pede = async (url, headers = {}) => {\n  try {\n    const r = await this.helpers.httpRequest({ method: 'GET', url, headers, json: true, timeout: TIMEOUT, ignoreHttpStatusErrors: true, returnFullResponse: true });\n    return { status: r.statusCode || r.status || 0, body: r.body ?? r };\n  } catch (e) {\n    return { status: 0, body: null, erro: String(e && e.message || e).slice(0, 160) };\n  }\n};\nconst instancia = async (nome) => {\n  const r = await pede(`${evo}/instance/connectionState/${nome}`, { apikey: $env.EVOLUTION_API_KEY || '' });\n  const estado = r.body && r.body.instance && r.body.instance.state;\n  if (r.status === 0) return { ok: false, detalhe: `Evolution não respondeu (${r.erro || 'sem resposta'})` };\n  if (r.status !== 200) return { ok: false, detalhe: `Evolution respondeu ${r.status}` };\n  return estado === 'open' ? { ok: true, detalhe: 'conectado' } : { ok: false, detalhe: `WhatsApp ${estado || 'desconhecido'} (precisa ler o QR de novo)` };\n};\nconst saude = async () => {\n  const r = await pede(`${ponte}/saude`);\n  if (r.status === 0) return { ok: false, detalhe: `ponte não respondeu (${r.erro || 'sem resposta'})` };\n  if (r.status !== 200 || !r.body || r.body.ok !== true) return { ok: false, detalhe: `ponte respondeu ${r.status}` };\n  if (r.body.conectada !== true) return { ok: false, detalhe: 'ponte de pé, mas sem ligação com o backend (as conversas não chegam ao painel)' };\n  return { ok: true, detalhe: `conectada, fila ${r.body.fila || 0}` };\n};\nconst health = async () => {\n  const r = await pede(`${backend}/health`);\n  if (r.status === 0) return { ok: false, detalhe: `backend não respondeu (${r.erro || 'sem resposta'})` };\n  return r.status === 200 ? { ok: true, detalhe: 'ok' } : { ok: false, detalhe: `backend respondeu ${r.status}` };\n};\nconst [goby, suporte, pt, bk] = await Promise.all([instancia('goby'), instancia('goby-suporte'), saude(), health()]);\nreturn [{ json: { em: Date.now(), pecas: {\n  'WhatsApp da Nina (goby)': goby,\n  'WhatsApp do suporte (goby-suporte)': suporte,\n  'Ponte (PC → painel)': pt,\n  'Backend (Render)': bk,\n} } }];\n"
+        "jsCode": "// A consulta autenticada traz o estado e a mesma lista usada pelo resumo do suporte.\nconst backend = ($env.AUUII_API_URL || 'https://ifood.onrender.com').replace(/\\/+$/, '');\nconst dados = $getWorkflowStaticData('global');\ntry {\n  const r = await this.helpers.httpRequest({\n    method: 'GET',\n    url: `${backend}/api/suporte/goby/suporte/guardiao`,\n    headers: { 'x-suporte-api-key': $env.AUUII_API_TOKEN_GOBY || $env.AUUII_API_TOKEN || '' },\n    json: true,\n    timeout: 8000,\n    ignoreHttpStatusErrors: true,\n    returnFullResponse: true,\n  });\n  const status = r.statusCode || r.status || 0;\n  const body = r.body ?? r;\n  if (status === 200 && body && Array.isArray(body.destinatarios)) {\n    dados.destinatarios = [...new Set(body.destinatarios.map((n) => String(n || '').replace(/\\D/g, '')).filter((n) => n.length >= 12 && n.length <= 15))];\n  }\n  return [{ json: { ativo: !(status === 200 && body && body.ativo === false), consultou: status === 200 } }];\n} catch (e) {\n  return [{ json: { ativo: true, consultou: false, erro: String(e && e.message || e).slice(0, 160) } }];\n}\n"
       },
-      "name": "Checa",
+      "name": "Consulta controle",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -34,23 +34,8 @@
         0
       ],
       "notesInFlow": true,
-      "notes": "Evolution (goby, goby-suporte), ponte, backend",
+      "notes": "Só pausa com resposta explícita de desligado; falha de consulta mantém o monitor ativo",
       "id": "5a0d1a00-0000-4000-9000-000000000002"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Memória entre rodadas: o estado anterior de cada peça e quando foi o último aviso.\nconst LEMBRA_MS = 60 * 60 * 1000;\nconst dados = $getWorkflowStaticData('global');\nif (!dados.pecas) dados.pecas = {};\nconst agora = $input.first().json.em || Date.now();\nconst pecas = $input.first().json.pecas || {};\n// O dono: DONO_WHATSAPP, ou o 1º de SUPORTE_WHATSAPP (ordem: dono, sócio, número do suporte).\nconst primeiroSuporte = String($env.SUPORTE_WHATSAPP || '').split(/[,;\\s]+/).map((n) => n.replace(/\\D/g, '')).filter((n) => n.length >= 12)[0] || '';\nconst destino = String($env.DONO_WHATSAPP || '').replace(/\\D/g, '') || primeiroSuporte;\nconst caidas = [];\nconst voltaram = [];\nconst lembrar = [];\nfor (const [nome, r] of Object.entries(pecas)) {\n  const antes = dados.pecas[nome] || { ok: true, desde: null, avisadoEm: null };\n  if (!r.ok && antes.ok) {\n    dados.pecas[nome] = { ok: false, desde: agora, avisadoEm: agora, detalhe: r.detalhe };\n    caidas.push({ nome, detalhe: r.detalhe });\n  } else if (!r.ok && !antes.ok) {\n    if (agora - (antes.avisadoEm || 0) >= LEMBRA_MS) {\n      dados.pecas[nome] = { ...antes, avisadoEm: agora, detalhe: r.detalhe };\n      lembrar.push({ nome, detalhe: r.detalhe, haMin: Math.round((agora - (antes.desde || agora)) / 60000) });\n    }\n  } else if (r.ok && !antes.ok) {\n    voltaram.push({ nome, ficouMin: Math.round((agora - (antes.desde || agora)) / 60000) });\n    dados.pecas[nome] = { ok: true, desde: null, avisadoEm: null };\n  } else {\n    dados.pecas[nome] = { ok: true, desde: null, avisadoEm: null };\n  }\n}\nconst linhas = [];\nif (caidas.length) linhas.push('🔴 *Caiu:*', ...caidas.map((c) => `• ${c.nome}: ${c.detalhe}`));\nif (lembrar.length) linhas.push('⏳ *Continua fora:*', ...lembrar.map((c) => `• ${c.nome} há ${c.haMin} min: ${c.detalhe}`));\nif (voltaram.length) linhas.push('🟢 *Voltou:*', ...voltaram.map((c) => `• ${c.nome} (ficou ${c.ficouMin} min fora)`));\nif (!linhas.length) return [];\nconst hora = new Date(agora).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });\nconst mensagem = [`🛡️ *Guardião · ${hora}*`, ...linhas].join('\\n');\n// Por qual número mandar: o da Nina (dono, 16/10/2026); se ele caiu, o do suporte. Se os dois\n// caíram, não há por onde.\nconst okSuporte = pecas['WhatsApp do suporte (goby-suporte)'] && pecas['WhatsApp do suporte (goby-suporte)'].ok;\nconst okNina = pecas['WhatsApp da Nina (goby)'] && pecas['WhatsApp da Nina (goby)'].ok;\nconst instancia = okNina ? 'goby' : okSuporte ? 'goby-suporte' : null;\nif (!destino) return [{ json: { mensagem, semDestino: true, motivo: 'DONO_WHATSAPP e SUPORTE_WHATSAPP vazios no .env' } }];\nif (!instancia) return [{ json: { mensagem, semDestino: true, motivo: 'os dois números estão fora: não há por onde mandar' } }];\nreturn [{ json: { telefone: destino, instancia, mensagem } }];\n"
-      },
-      "name": "Compara",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        440,
-        0
-      ],
-      "notesInFlow": true,
-      "notes": "caiu / continua (1 h) / voltou; memória do fluxo",
-      "id": "5a0d1a00-0000-4000-9000-000000000003"
     },
     {
       "parameters": {
@@ -63,7 +48,72 @@
           },
           "conditions": [
             {
-              "id": "5a0d1a00-0000-4000-9000-000000000004-c",
+              "id": "5a0d1a00-0000-4000-9000-000000000003-c",
+              "leftValue": "={{ $json.ativo }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "name": "Monitor ligado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "5a0d1a00-0000-4000-9000-000000000003"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Confere cada peça. Nunca lança: o resultado de cada uma é ok/erro, e o Compara decide.\nconst evo = ($env.EVOLUTION_API_URL || 'http://evolution:8080').replace(/\\/+$/, '');\nconst backend = ($env.AUUII_API_URL || 'https://ifood.onrender.com').replace(/\\/+$/, '');\nconst ponte = ($env.PONTE_URL || 'http://ponte:3100').replace(/\\/+$/, '');\nconst TIMEOUT = 8000;\nconst pede = async (url, headers = {}) => {\n  try {\n    const r = await this.helpers.httpRequest({ method: 'GET', url, headers, json: true, timeout: TIMEOUT, ignoreHttpStatusErrors: true, returnFullResponse: true });\n    return { status: r.statusCode || r.status || 0, body: r.body ?? r };\n  } catch (e) {\n    return { status: 0, body: null, erro: String(e && e.message || e).slice(0, 160) };\n  }\n};\nconst instancia = async (nome) => {\n  const r = await pede(`${evo}/instance/connectionState/${nome}`, { apikey: $env.EVOLUTION_API_KEY || '' });\n  const estado = r.body && r.body.instance && r.body.instance.state;\n  if (r.status === 0) return { ok: false, detalhe: `Evolution não respondeu (${r.erro || 'sem resposta'})` };\n  if (r.status !== 200) return { ok: false, detalhe: `Evolution respondeu ${r.status}` };\n  return estado === 'open' ? { ok: true, detalhe: 'conectado' } : { ok: false, detalhe: `WhatsApp ${estado || 'desconhecido'} (precisa ler o QR de novo)` };\n};\nconst saude = async () => {\n  const r = await pede(`${ponte}/saude`);\n  if (r.status === 0) return { ok: false, detalhe: `ponte não respondeu (${r.erro || 'sem resposta'})` };\n  if (r.status !== 200 || !r.body || r.body.ok !== true) return { ok: false, detalhe: `ponte respondeu ${r.status}` };\n  if (r.body.conectada !== true) return { ok: false, detalhe: 'ponte de pé, mas sem ligação com o backend (as conversas não chegam ao painel)' };\n  return { ok: true, detalhe: `conectada, fila ${r.body.fila || 0}` };\n};\nconst health = async () => {\n  const r = await pede(`${backend}/health`);\n  if (r.status === 0) return { ok: false, detalhe: `backend não respondeu (${r.erro || 'sem resposta'})` };\n  return r.status === 200 ? { ok: true, detalhe: 'ok' } : { ok: false, detalhe: `backend respondeu ${r.status}` };\n};\nconst [goby, suporte, pt, bk] = await Promise.all([instancia('goby'), instancia('goby-suporte'), saude(), health()]);\nreturn [{ json: { em: Date.now(), pecas: {\n  'WhatsApp da Nina (goby)': goby,\n  'WhatsApp do suporte (goby-suporte)': suporte,\n  'Ponte (PC → painel)': pt,\n  'Backend (Render)': bk,\n} } }];\n"
+      },
+      "name": "Checa",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "Evolution (goby, goby-suporte), ponte, backend",
+      "id": "5a0d1a00-0000-4000-9000-000000000004"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Memória entre rodadas: o estado anterior de cada peça e quando foi o último aviso.\nconst LEMBRA_MS = 60 * 60 * 1000;\nconst dados = $getWorkflowStaticData('global');\nif (!dados.pecas) dados.pecas = {};\nconst agora = $input.first().json.em || Date.now();\nconst pecas = $input.first().json.pecas || {};\nconst caidas = [];\nconst voltaram = [];\nconst lembrar = [];\nfor (const [nome, r] of Object.entries(pecas)) {\n  const antes = dados.pecas[nome] || { ok: true, desde: null, avisadoEm: null };\n  if (!r.ok && antes.ok) {\n    dados.pecas[nome] = { ok: false, desde: agora, avisadoEm: agora, detalhe: r.detalhe };\n    caidas.push({ nome, detalhe: r.detalhe });\n  } else if (!r.ok && !antes.ok) {\n    if (agora - (antes.avisadoEm || 0) >= LEMBRA_MS) {\n      dados.pecas[nome] = { ...antes, avisadoEm: agora, detalhe: r.detalhe };\n      lembrar.push({ nome, detalhe: r.detalhe, haMin: Math.round((agora - (antes.desde || agora)) / 60000) });\n    }\n  } else if (r.ok && !antes.ok) {\n    voltaram.push({ nome, ficouMin: Math.round((agora - (antes.desde || agora)) / 60000) });\n    dados.pecas[nome] = { ok: true, desde: null, avisadoEm: null };\n  } else {\n    dados.pecas[nome] = { ok: true, desde: null, avisadoEm: null };\n  }\n}\nconst linhas = [];\nif (caidas.length) linhas.push('🔴 *Caiu:*', ...caidas.map((c) => `• ${c.nome}: ${c.detalhe}`));\nif (lembrar.length) linhas.push('⏳ *Continua fora:*', ...lembrar.map((c) => `• ${c.nome} há ${c.haMin} min: ${c.detalhe}`));\nif (voltaram.length) linhas.push('🟢 *Voltou:*', ...voltaram.map((c) => `• ${c.nome} (ficou ${c.ficouMin} min fora)`));\nif (!linhas.length) return [];\nconst hora = new Date(agora).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });\nconst mensagem = [`🛡️ *Guardião · ${hora}*`, ...linhas].join('\\n');\n// O destino é o que está escolhido no Resumo do dia (ou os números padrão do servidor).\nconst okSuporte = pecas['WhatsApp do suporte (goby-suporte)'] && pecas['WhatsApp do suporte (goby-suporte)'].ok;\nconst okNina = pecas['WhatsApp da Nina (goby)'] && pecas['WhatsApp da Nina (goby)'].ok;\nconst instancia = okNina ? 'goby' : okSuporte ? 'goby-suporte' : null;\nconst destinatarios = Array.isArray(dados.destinatarios) ? dados.destinatarios : [];\nif (!destinatarios.length) return [{ json: { mensagem, semDestino: true, motivo: 'não há destinatários selecionados no Resumo do dia nem números padrão no servidor' } }];\nif (!instancia) return [{ json: { mensagem, semDestino: true, motivo: 'os dois números estão fora: não há por onde mandar' } }];\nreturn destinatarios.map((telefone) => ({ json: { telefone, instancia, mensagem } }));\n"
+      },
+      "name": "Compara",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "caiu / continua (1 h) / voltou; memória do fluxo",
+      "id": "5a0d1a00-0000-4000-9000-000000000005"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5a0d1a00-0000-4000-9000-000000000006-c",
               "leftValue": "={{ !$json.semDestino && !!$json.telefone }}",
               "rightValue": "",
               "operator": {
@@ -82,10 +132,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        660,
+        1100,
         0
       ],
-      "id": "5a0d1a00-0000-4000-9000-000000000004"
+      "id": "5a0d1a00-0000-4000-9000-000000000006"
     },
     {
       "parameters": {
@@ -120,13 +170,13 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        880,
+        1320,
         -100
       ],
       "onError": "continueRegularOutput",
       "notesInFlow": true,
-      "notes": "pro dono, pelo número da Nina (ou do suporte se a Nina caiu)",
-      "id": "5a0d1a00-0000-4000-9000-000000000005"
+      "notes": "para cada destinatário do Resumo do dia, pelo número disponível",
+      "id": "5a0d1a00-0000-4000-9000-000000000007"
     }
   ],
   "connections": {
@@ -134,11 +184,34 @@
       "main": [
         [
           {
-            "node": "Checa",
+            "node": "Consulta controle",
             "type": "main",
             "index": 0
           }
         ]
+      ]
+    },
+    "Consulta controle": {
+      "main": [
+        [
+          {
+            "node": "Monitor ligado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monitor ligado?": {
+      "main": [
+        [
+          {
+            "node": "Checa",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
       ]
     },
     "Checa": {
